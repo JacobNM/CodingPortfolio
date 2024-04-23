@@ -4,7 +4,7 @@
 # Fields to be entered as specified in example below, following the script call:
     #'C:\users\j\downloads' 'C:\users\j\Documents\Downloaded files'
 
-
+function Copy-FilesAndSortByExtension{
 
 # Parameters
 
@@ -77,3 +77,5 @@ foreach ($dir in $dirs){
     Get-FolderStats $dir.FullName
 }
 "`nFiles copied successfully."
+
+}
