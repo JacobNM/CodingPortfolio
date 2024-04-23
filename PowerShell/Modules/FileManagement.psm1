@@ -27,18 +27,11 @@ function New-FileFolder {
 
 # Function to create one or more files in a designated folder based off of choices from script user.
 function New-Files {
-    
-    # prompts for folder path for file creation.
-    [string]$DirectoryPath = Read-Host -Prompt "`nProvide the full path of the folder you are attaching the file(s) to (Example: C:/****/****/Folder Name) " 
-    
-    # Prompts for file name(s).
-    [string]$FileNamePrompt = Read-Host -Prompt "`nProvide the name of the file(s) you would like to create (Example: My New File) " 
-   
-    # Prompts for extension type.
-    [string]$Extension = Read-Host -Prompt "`nProvide the extension type for the file(s) you are creating (Examples: txt, pdf, csv, docx) "
-
-    # Prompts for the number of files to be created
-    [int]$NumberOfFiles = Read-Host -Prompt "`nProvide the number of files you would like to create"
+    param (
+        [string]$DirectoryPath,
+        [int]$NumberOfFiles,
+        [string]$Extension
+    )
 
     # Check if the directory exists and creates it if not
     if (-not (Test-Path -Path $DirectoryPath -PathType Container)) {
@@ -52,8 +45,8 @@ function New-Files {
             $FileFolderPath = Join-Path -Path $DirectoryPath -ChildPath "$FileNamePrompt.$Extension"
             New-Item -Path $FileFolderPath -ItemType File
             Write-Host "Created file: $FileName"
-            }
-
+    }
+            
     else {
         # Generate and create multiple files with number attached to each if user requires more than one file.
         1..$NumberOfFiles | ForEach-Object {
@@ -64,13 +57,10 @@ function New-Files {
             $FileFolderPath = Join-Path -Path $DirectoryPath -ChildPath "$FileName.$Extension"
             New-Item -Path $FileFolderPath -ItemType File
             Write-Host "Created file: $FileName.$Extension"
-            }
         }
-    
-    # Informs script user of completed file creation and prompts for return to main menu.
-    Read-Host -Prompt "`nFile creation complete. Press enter to return to the main menu"   
-    }
-   
+    }    
+}
+        
 # Creates a function that will search through a folder for a file name and move files that match the name to a new designated folder.
     # Do not use the following symbols for file names ( \ / : * ? " < > | )
 function Move-SpecificFiles {
