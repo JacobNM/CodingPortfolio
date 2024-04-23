@@ -133,6 +133,8 @@ function Search-FileRequest {
 }
 
 # Function to search for multiple files with different names in a folder, and move those files to a designated folder.
+    # Example usage of function.
+    # Move-FilesByPatterns -SourceFolder "C:\Users\j\Downloads" -DestinationFolder "C:\Users\j\Documents\Movies" -FilePatterns "Elvis","Barbie"
 function Move-FilesByPatterns {
     param (
         [string]$SourceFolder,
@@ -140,11 +142,6 @@ function Move-FilesByPatterns {
         [string[]]$FilePatterns
     )
 
-    # Example usage:
-        # $SourceFolder = "C:\Users\j\Downloads"
-        # $DestinationFolder = "C:\Users\j\Documents\Movies"
-        # $FilePatterns = @("Elvis","Migration","Barbie")
-    
     # Get all files in the source folder
     $Files = Get-ChildItem -Path $SourceFolder -File -Recurse
 
@@ -190,17 +187,14 @@ function Move-FilesByPatterns {
                 else {
                     Write-Host "`n$FilePattern not found."
                 }
-            
+                    
             }
-
-    }
+                
+}
         
-# Example usage of function.
-#Move-FilesByPatterns -SourceFolder $SourceFolder -DestinationFolder $DestinationFolder -FilePatterns $FilePatterns
 
 # Function to copy contents of folder to new destination
     # Function also sorts each file in destination folder by each of their associated extensions; creates a folder for each
-    
     # Fields to be entered as specified in example below, following the function call:
     #'C:\users\j\downloads' 'C:\users\j\Documents\Downloaded files'
 
