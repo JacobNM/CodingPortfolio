@@ -35,7 +35,7 @@ function New-Files {
 
     # Check if the directory exists and creates it if not
     if (-not (Test-Path -Path $DirectoryPath -PathType Container)) {
-        Write-Host "Directory does not exist. Creating directory: $DirectoryPath"
+        Write-Host "`nDirectory does not exist. Creating directory: $DirectoryPath"
         New-Item -Path $DirectoryPath -ItemType Directory
     }
 
@@ -44,7 +44,7 @@ function New-Files {
             # Attach file to parent folder and create.
             $FileFolderPath = Join-Path -Path $DirectoryPath -ChildPath "$FileNamePrompt.$Extension"
             New-Item -Path $FileFolderPath -ItemType File
-            Write-Host "Created file: $FileName"
+            Write-Host "`nCreated file: $FileName"
     }
             
     else {
@@ -56,7 +56,7 @@ function New-Files {
             # Attach files to parent folder and create.
             $FileFolderPath = Join-Path -Path $DirectoryPath -ChildPath "$FileName.$Extension"
             New-Item -Path $FileFolderPath -ItemType File
-            Write-Host "Created file: $FileName.$Extension"
+            Write-Host "`nCreated file: $FileName.$Extension"
         }
     }    
 }
