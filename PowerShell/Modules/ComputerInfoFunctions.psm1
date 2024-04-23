@@ -18,9 +18,7 @@ function Show-OSInfo {
     Write-Host "`nOperating System Info:"
     Write-Host "----------------------"
     $OSInfoToDisplay
-
-    # Notifies script user that search has concluded and they are returning to the sub-menu.
-    Read-Host -Prompt "`nOperation complete. Press enter to return to the sub-menu"
+    
 }
 
 # Function to display information on CPU information for machine.
@@ -49,9 +47,7 @@ function Show-CPUInfo {
     Write-Host "`nCPU utilization:"
     Write-Host "----------------"
     $CPUUtilization
-
-    # Notifies script user that search has concluded and they are returning to the sub-menu.
-    Read-Host -Prompt "`nOperation complete. Press enter to return to the sub-menu"   
+   
 }
 
  # Function to display information on memory for the machine.
@@ -74,8 +70,6 @@ function Show-CPUInfo {
     Write-Host "`nTotal memory available: $($TotalMemory)GB"
     Write-Host "Memory usage in Percentage: $([System.Math]::Round($AvailableMemoryPercentage,2))%"
     
-    # Notifies script user that search has concluded and they are returning to the sub-menu.
-    Read-Host -Prompt "`nOperation complete. Press enter to return to the sub-menu"   
  }
 
 # Function to display Disk information for the machine.
@@ -106,8 +100,6 @@ function Show-DiskInfo {
             }
     }
 
-    # Notifies script user that search has concluded and they are returning to the sub-menu.
-    Read-Host -Prompt "`nOperation complete. Press enter to return to the sub-menu"   
 }
 
 # Function to display the current uptime of the machine.
@@ -126,6 +118,4 @@ function Show-CurrentUptime {
     # Display uptime
     Write-Host "`nUptime: $($Uptime.Days) days, $($Uptime.Hours) hours, $($Uptime.Minutes) minutes`n"
 
-    # Notifies script user that search has concluded and they are returning to the sub-menu.
-    Read-Host -Prompt "`nOperation complete. Press enter to return to main menu"
 }
