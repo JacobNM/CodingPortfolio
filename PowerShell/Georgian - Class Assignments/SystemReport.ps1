@@ -8,19 +8,21 @@ function Get-MySystemReport {
                         ValueFromPipeline=$true,
                         HelpMessage="The Disk-Report parameter provides information on host disk drives"
                         )]
-            [switch]$Disks,
+                        [switch]$Disks,
+
             [Parameter( Mandatory=$false,
                         Position=0,
                         ValueFromPipeline=$true,
                         HelpMessage="The 'Network-Report' parameter provides information on host network adapters"
                         )]
-            [switch]$Network,
+                        [switch]$Network,
+
             [Parameter( Mandatory=$false,
                         Position=0,
                         ValueFromPipeline=$true,
                         HelpMessage="The 'System-Report' parameter provides information on host network adapters"
                         )]
-            [switch]$System)
+                        [switch]$System)
     # If Disks is specified on command line, Disk Drives info is presented
     if ($Disks) {
         Get-MyDiskDrives
