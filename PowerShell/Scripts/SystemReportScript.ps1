@@ -5,20 +5,20 @@ function Get-MySystemReport {
                         ValueFromPipeline=$true,
                         HelpMessage="The Disk-Report parameter provides information on host disk drives"
                         )]
-            [switch]$Disks),
+            [switch]$Disks,
             [Parameter( Mandatory=$false,
                         Position=0,
                         ValueFromPipeline=$true,
                         HelpMessage="The 'Network-Report' parameter provides information on host network adapters"
                         )]
             [switch]$Network,
-        ([Parameter(    Mandatory=$false,
+            [Parameter( Mandatory=$false,
                         Position=0,
                         ValueFromPipeline=$true,
                         HelpMessage="The 'System-Report' parameter provides information on host network adapters"
                         )]
             [switch]$System)
-}
+
     if ($Disks) {
         Get-MyDiskDrives
         }
@@ -41,4 +41,4 @@ function Get-MySystemReport {
         Get-MyDiskDrives
         Get-MyVideoCardInfo
     }
-
+}
