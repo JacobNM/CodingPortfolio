@@ -221,9 +221,10 @@ function Get-MyVideoCardInfo {
 
 # System  report function
 
-#Script Provides basic information for various properties on host computer
+# Script Provides basic information for various properties on host computer
 # filters through parameters entered on the command line to generate a system report based on user input
 # Information is provided by functions held in "module200536041"
+
 function Get-MySystemReport {
     [CmdletBinding()]
     param ([Parameter ( Mandatory=$false,
