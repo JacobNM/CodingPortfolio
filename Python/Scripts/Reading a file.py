@@ -1,8 +1,8 @@
 import os
 
-readFile = open ('C:\\Python Files\\Test.txt', 'r')
+readFile = open ('C:\\Python Files\\subfolder\\test\\testFile.txt', 'r')
 
-fileContent = readFile.readline ()
+fileContent = readFile.read ()
 
 print (fileContent)
 
