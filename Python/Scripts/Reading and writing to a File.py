@@ -27,7 +27,7 @@ if (os.path.exists('c:\\Python files\\subfolder\\test')==False):
     testFile.close ()
     
 else:
-    testFile = open ('c:\\Python files\\subfolder\\test\\testFile.txt', 'w')
+    testFile = open ('c:\\Python files\\subfolder\\test\\testFile.txt', 'a')
     testFile.write (stringToWrite)
     testFile.close ()
 
