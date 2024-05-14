@@ -7,7 +7,7 @@ if [ "$(whoami)" != "root" ]; then echo "must be root (try 'sudo' at beginning o
 
 # Grabs operating system release file and function list script for utilization of variables contained within;
 source /etc/os-release
-source reportfunctions.sh
+source /home/jacob/Scripting/reportfunctions.sh
 
 # Inspection tools
     # Inspection tools used for variables created in function library
@@ -93,4 +93,4 @@ if [[ "$Full_Report" == true ]]; then
 fi
 # Provides information on who accessed the system information, and the time of day
 Current_Time=$(date +"%I:%M %p %Z")
-echo "System info produced by $USER at $Current_Time"
+printf "\nSystem info produced by $USER at $Current_Time\n"
