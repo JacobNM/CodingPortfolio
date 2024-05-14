@@ -22,7 +22,7 @@ example_table=$(paste -d ';' <(echo "$letter_a" ; echo "$letter_b" ; echo "$lett
         # by creating labels needed to match number of columns you made above
     column -N Letters,Numbers,'Words (or colours)' -s ';' -o ' | ' -t   )
 
-# Can use cat to neatly print out your table with some neat titles and shit
+# Can use cat to neatly print out your table with some neat titles and such.
 cat << EOF
 
          Example Table
