@@ -1,5 +1,5 @@
 # Script used to copy files from one folder to a specified folder of the use's choice.
-# If the destination folders specified in the destination field entered by the user do not exist, they will be created.
+# If the destination folders needed to move the files do not exist, they will be created.
 
 # Fields to be entered as specified in example below, following the script call:
     #'C:\users\j\downloads' 'C:\users\j\Documents\Downloaded files'
