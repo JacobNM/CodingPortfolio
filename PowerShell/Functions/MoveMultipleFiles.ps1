@@ -1,4 +1,5 @@
 # Function to search for multiple files with different names in a folder, and move those files to a designated folder.
+    # Do not use the following symbols for naming new files/folders ( \ / : * ? " < > | )
 function Move-FilesByPatterns {
     param (
         [string]$SourceFolder,
