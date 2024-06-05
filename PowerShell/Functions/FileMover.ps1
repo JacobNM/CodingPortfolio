@@ -1,4 +1,5 @@
 # Script creates functions that will search through a folder for a file name and move files that match the name to a new designated folder.
+    # Doesn't seem to work for mp4 files for some reason..
     # Do not use the following symbols for naming new files/folders ( \ / : * ? " < > | )
 
 function Move-SpecificFiles {
