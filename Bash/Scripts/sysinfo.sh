@@ -7,7 +7,7 @@ if [ "$(whoami)" != "root" ]; then echo "must be root (try 'sudo' at beginning o
 
 # Grabs operating system release file and function list script for utilization of variables contained within;
 source /etc/os-release
-source /home/jacob/Scripting/reportfunctions.sh
+source /home/jacob/Repos/CodingPortfolio/Bash/Functions/reportfunctions.sh
 
 # Inspection tools
     # Inspection tools used for variables created in function library
