@@ -24,6 +24,17 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# Check to see which options have been requested on command line;
+# If no options have been selected, defaults will be used
+if [[ $path == true ]]; then
+    echo "Path to directory provided."
+fi
+
+if [[ $days == true ]]; then
+    echo "Number of days provided."
+fi
+
+# Check if path provided is a valid directory
 if [[ ! -d "$path" ]]; then
         echo "Error: The specified path does not exist."
         return 1
