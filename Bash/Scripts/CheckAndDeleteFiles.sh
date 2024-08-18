@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Function to check and delete old files
+# Function will list the files in the specified path that are older than the specified threshold and prompt you for confirmation before deleting them. 
+# If the specified path doesn't exist, it will display an error message.
 check_and_delete_files() {
     local target_path="$1"
     local days_threshold="$2"
@@ -21,15 +22,7 @@ check_and_delete_files() {
 }
 
 # Usage example:
-check_and_delete_files "$1" "$2"
-```
+# ./check_and_delete.sh "/path/to/your/folder" 30
 
-To use this function, save it to a file (e.g., `check_and_delete.sh`), make it executable (`chmod +x check_and_delete.sh`), and then run it from the command line like this:
-
-```bash
-./check_and_delete.sh "/path/to/your/folder" 30
-```
-
-Replace `"/path/to/your/folder"` with the actual path you want to check, and provide the desired number of days as the second argument. The function will list the files older than the specified threshold and prompt you for confirmation before deleting them. If the specified path doesn't exist, it will display an error message.
-
-Feel free to customize the function further based on your needs! 😊
+# Replace `"/path/to/your/folder"` with the actual path you want to check.
+# and provide the desired number of days as the second argument. 
