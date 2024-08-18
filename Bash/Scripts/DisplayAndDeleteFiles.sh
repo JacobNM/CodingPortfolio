@@ -47,8 +47,8 @@ else
     days="$2"
 fi
 
-# Find files older than specified number of days in the given path
-find "$path" -type f -mtime +"$days" -print
+# Find files older than the specified number of days in the given path
+find "$path" -type f -mtime +"$days" -exec ls -ltrah {} \;
 
 # Confirmation before deletion of files
 read -p "Do you want to delete these files? (y/n): " confirm
