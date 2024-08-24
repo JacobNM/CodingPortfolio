@@ -4,19 +4,17 @@ import re
 # Set the path to your Obsidian vault
 obsidian_vault_path = "/path/to/your/obsidian/vault"
 
-# Function to move tags from the beginning of the task to the end, if they were originally present
+# Function to move tags from the beginning of the task to the end
 def move_tags_in_task(task):
     # Regex to find tags at the beginning of the task
     match = re.match(r"^(\s*-\s\[\s*\]\s*)(#\S+\s+)+(.+)", task)
     if match:
         prefix = match.group(1)  # Task checkbox and leading spaces
-        tags = re.findall(r"#\S+", task)  # Find all tags at the beginning
+        tags = re.findall(r"#\S+", task)  # Find all tags
         content = match.group(3)  # The actual task content without tags
-        # Check if any of the tags are already at the end of the content
-        if not any(tag in content for tag in tags):
-            # Rebuild the task with tags at the end only if they aren't already there
-            new_task = f"{prefix}{content} {' '.join(tags)}"
-            return new_task
+        # Rebuild the task with tags at the end
+        new_task = f"{prefix}{content} {' '.join(tags)}"
+        return new_task
     return task
 
 # Function to process all markdown files in the vault
