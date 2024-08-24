@@ -1,41 +1,51 @@
 import os
+import re
 
-# Loop through all files in the given folder
-def ModifyFile(file_path):
-    for root, dirs, files in os.walk(tasks_file):
-        for file_name in files:
-        # Only process markdown files
-            if file_name.endswith(".md"):
-                file_path = os.path.join(root, file_name)
+# Set the path to your Obsidian vault
+obsidian_vault_path = "/path/to/your/obsidian/vault"
+
+# Function to move tags from the beginning of the task to the end
+def move_tags_in_task(task):
+    # Regex to find tags at the beginning of the task
+    match = re.match(r"^(\s*-\s\[\s*\]\s*)(#\S+\s+)+(.+)", task)
+    if match:
+        prefix = match.group(1)  # Task checkbox and leading spaces
+        tags = re.findall(r"#\S+", task)  # Find all tags
+        content = match.group(3)  # The actual task content without tags
+        # Rebuild the task with tags at the end
+        new_task = f"{prefix}{content} {' '.join(tags)}"
+        return new_task
+    return task
+
+# Function to process all markdown files in the vault
+def process_files_in_vault(vault_path):
+    for root, dirs, files in os.walk(vault_path):
+        for file in files:
+            if file.endswith(".md"):
+                file_path = os.path.join(root, file)
                 process_file(file_path)
 
-# Loop through all files in the given folder
+# Function to process each individual file
 def process_file(file_path):
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-
-    modified_lines = []
-    for line in lines:
-        # Check if the line is a task line (starting with - [ ] or - [x])
-        if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]"):
-            # Split the line into text and tags
-            parts = line.split("#")
-            text = parts[0]
-            tags = "#" + "#".join(parts[1:])
-
-            # Append the tags to the end of the line
-            line = text.strip() + " " + tags.strip() + "\n"
-
-        modified_lines.append(line)
-
-    with open(file_path, 'w') as file:
-        file.writelines(modified_lines)
-
-    print(f"Processed: {file_path}")
-
-
-    print("Tags moved to the end of each task.")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
     
-# Define the path to your Obsidian tasks file
-tasks_file = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
-ModifyFile(tasks_file)
+    modified_lines = []
+    modified = False
+    for line in lines:
+        if line.strip().startswith("- [ ]"):  # Identify tasks
+            new_line = move_tags_in_task(line)
+            modified_lines.append(new_line)
+            if new_line != line:
+                modified = True
+        else:
+            modified_lines.append(line)
+    
+    if modified:
+        # Save changes back to the file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.writelines(modified_lines)
+        print(f"Updated: {file_path}")
+
+# Run the script on your Obsidian vault
+process_files_in_vault(obsidian_vault_path)
