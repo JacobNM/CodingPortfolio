@@ -47,5 +47,16 @@ def process_file(file_path):
             f.writelines(modified_lines)
         print(f"Updated: {file_path}")
 
+def remove_duplicate_tags(task):
+    tags = re.findall(r"#\S+", task)  # Find all tags
+    unique_tags = list(set(tags))  # Remove duplicates using set
+    new_task = re.sub(r"#\S+", "", task)  # Remove all tags from the task
+    new_task += " " + " ".join(unique_tags)  # Add unique tags at the end
+    return new_task
+
+# Modify each task to remove duplicate tags
+for i, line in enumerate(modified_lines):
+    modified_lines[i] = remove_duplicate_tags(line)
+
 # Run the script on your Obsidian vault
 process_files_in_vault(obsidian_vault_path)
