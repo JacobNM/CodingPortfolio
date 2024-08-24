@@ -1,0 +1,53 @@
+import os
+import re
+
+# Set the path to your Obsidian vault
+obsidian_vault_path = "/path/to/your/obsidian/vault"
+
+# Function to move tags from the beginning of the task to the end, if they were originally present
+def move_tags_in_task(task):
+    # Regex to find tags at the beginning of the task
+    match = re.match(r"^(\s*-\s\[\s*\]\s*)(#\S+\s+)+(.+)", task)
+    if match:
+        prefix = match.group(1)  # Task checkbox and leading spaces
+        tags = re.findall(r"#\S+", task)  # Find all tags at the beginning
+        content = match.group(3)  # The actual task content without tags
+        # Check if any of the tags are already at the end of the content
+        if not any(tag in content for tag in tags):
+            # Rebuild the task with tags at the end only if they aren't already there
+            new_task = f"{prefix}{content} {' '.join(tags)}"
+            return new_task
+    return task
+
+# Function to process all markdown files in the vault
+def process_files_in_vault(vault_path):
+    for root, dirs, files in os.walk(vault_path):
+        for file in files:
+            if file.endswith(".md"):
+                file_path = os.path.join(root, file)
+                process_file(file_path)
+
+# Function to process each individual file
+def process_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    
+    modified_lines = []
+    modified = False
+    for line in lines:
+        if line.strip().startswith("- [ ]"):  # Identify tasks
+            new_line = move_tags_in_task(line)
+            modified_lines.append(new_line)
+            if new_line != line:
+                modified = True
+        else:
+            modified_lines.append(line)
+    
+    if modified:
+        # Save changes back to the file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.writelines(modified_lines)
+        print(f"Updated: {file_path}")
+
+# Run the script on your Obsidian vault
+process_files_in_vault(obsidian_vault_path)
