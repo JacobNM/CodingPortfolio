@@ -1,8 +1,6 @@
 import os
 
-# Define the path to your Obsidian tasks file
-tasks_file = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
-
+# Loop through all files in the given folder
 def ModifyFile(file_path):
     for root, dirs, files in os.walk(tasks_file):
         for file_name in files:
@@ -36,6 +34,8 @@ def process_file(file_path):
     print(f"Processed: {file_path}")
 
 
-
-
-print("Tags moved to the end of each task.")
+    print("Tags moved to the end of each task.")
+    
+# Define the path to your Obsidian tasks file
+tasks_file = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
+ModifyFile(tasks_file)
