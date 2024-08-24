@@ -27,7 +27,7 @@ def process_file(file_path, tag):
     
     print(f"Processed: {file_path}")
     
-print("Done!")
+    print("Done!")
 
 # Replace this with the path to your Obsidian vault folder
 obsidian_folder_path = "/path/to/your/obsidian/vault"
