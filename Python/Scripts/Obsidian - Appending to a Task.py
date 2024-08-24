@@ -25,7 +25,11 @@ def process_file(file_path, tag):
     with open(file_path, 'w') as file:
         file.writelines(modified_lines)
 
+    print("Appending tag to tasks...")
+    
     print(f"Processed: {file_path}")
+    
+    print("Done!")
 
 # Replace this with the path to your Obsidian vault folder
 obsidian_folder_path = "/path/to/your/obsidian/vault"
