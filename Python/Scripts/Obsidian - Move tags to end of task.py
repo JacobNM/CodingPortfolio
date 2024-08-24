@@ -12,8 +12,10 @@ def move_tags_in_task(task):
         prefix = match.group(1)  # Task checkbox and leading spaces
         tags = re.findall(r"#\S+", task)  # Find all tags
         content = match.group(3)  # The actual task content without tags
+        # Copy tags into a variable
+        tags_variable = ' '.join(tags)
         # Rebuild the task with tags at the end
-        new_task = f"{prefix}{content} {' '.join(tags)}"
+        new_task = f"{prefix}{content} {tags_variable}"
         return new_task
     return task
 
@@ -42,10 +44,8 @@ def process_file(file_path):
             modified_lines.append(line)
     
     if modified:
-        # Save changes back to the file
         with open(file_path, 'w', encoding='utf-8') as f:
             f.writelines(modified_lines)
-        print(f"Updated: {file_path}")
 
-# Run the script on your Obsidian vault
+# Process the files in the vault
 process_files_in_vault(obsidian_vault_path)
