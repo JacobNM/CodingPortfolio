@@ -2,7 +2,7 @@ import os
 import re
 
 # Set the path to your Obsidian vault
-obsidian_vault_path = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
+obsidian_vault_path = "/path/to/your/obsidian/vault"
 
 # Function to move tags from the beginning of the task to the end
 def move_tags_in_task(task):
