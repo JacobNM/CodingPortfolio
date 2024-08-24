@@ -2,7 +2,7 @@ import os
 import re
 
 # Set the path to your Obsidian vault
-obsidian_vault_path = "/path/to/your/obsidian/vault"
+obsidian_vault_path = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
 
 # Function to move tags from the beginning of the task to the end
 def move_tags_in_task(task):
@@ -24,6 +24,8 @@ def process_files_in_vault(vault_path):
             if file.endswith(".md"):
                 file_path = os.path.join(root, file)
                 process_file(file_path)
+                print(f"Processing: {file_path}")
+                print("Done!")
 
 # Function to process each individual file
 def process_file(file_path):
@@ -44,6 +46,7 @@ def process_file(file_path):
     if modified:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.writelines(modified_lines)
+            
 
 # Process the files in the vault
 process_files_in_vault(obsidian_vault_path)
