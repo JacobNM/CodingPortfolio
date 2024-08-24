@@ -2,20 +2,18 @@ import os
 import re
 
 # Set the path to your Obsidian vault
-obsidian_vault_path = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
+obsidian_vault_path = "/path/to/your/obsidian/vault"
 
 # Function to move tags from the beginning of the task to the end
 def move_tags_in_task(task):
     # Regex to find tags at the beginning of the task
-    match = re.match(r"^(\s*-\s\[\s*\]\s*)(#\S+\s+)+(.+)", task)
+    match = re.match(r"^(\s*-\s\[\s*\]\s*)((#\S+\s+)+)(.+)", task)
     if match:
         prefix = match.group(1)  # Task checkbox and leading spaces
-        tags = re.findall(r"#\S+", task)  # Find all tags
-        content = match.group(3)  # The actual task content without tags
-        # Copy tags into a variable
-        tags_variable = ' '.join(tags)
+        tags = match.group(2)  # Tags at the beginning
+        content = match.group(4)  # The actual task content without the initial tags
         # Rebuild the task with tags at the end
-        new_task = f"{prefix}{content} {tags_variable}"
+        new_task = f"{prefix}{content.strip()} {tags.strip()}\n"
         return new_task
     return task
 
