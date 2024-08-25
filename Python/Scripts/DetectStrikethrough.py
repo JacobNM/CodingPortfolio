@@ -16,15 +16,27 @@ def process_files_in_folder(folder_path):
                 if completed_tasks:
                     print(f"Detected tasks with strikethrough in {file_path}:")
                     print(completed_tasks)
+
+# Function to move tags from the beginning of the task to the end
+def move_tags_in_task(task):
+    # Regex to find tags at the beginning of complete tasks
+    match = re.match(r"^(\s*~~- \[x\]~~\s*)((#\S+\s+)+)(.+)", task) # Completed tasks with strikethrough
+    if match:
+        prefix = match.group(1)
+        tags = match.group(2)
+        content = match.group(4)
+        new_task = f"{prefix}{content.strip()} {tags.strip()}\n"
+        return new_task
+                    
+                
     print("Done!")                
                 
 # Function to process each individual file
 def process_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         file_content = f.readlines()
-            
     
 # Replace this with the path to the folder containing your markdown files
-folder_path = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
+folder_path = "/path/to/your/folder"
 
 process_files_in_folder(folder_path)            
