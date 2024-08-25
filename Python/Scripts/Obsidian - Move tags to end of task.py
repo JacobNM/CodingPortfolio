@@ -35,7 +35,7 @@ def process_file(file_path):
     modified_lines = []
     modified = False
     for line in lines:
-        if line.strip().startswith("- [ ]"):  # Identify tasks
+        if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]"):  # Identify tasks, both complete and incomplete
             new_line = move_tags_in_task(line)
             modified_lines.append(new_line)
             if new_line != line:
