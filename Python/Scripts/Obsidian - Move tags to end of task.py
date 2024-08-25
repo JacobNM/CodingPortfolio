@@ -2,7 +2,7 @@ import os
 import re
 
 # Set the path to your Obsidian vault
-obsidian_vault_path = "/path/to/your/obsidian/vault"
+obsidian_vault_path = "/path/to/your/vault"
 
 # Function to move tags from the beginning of the task to the end
 def move_tags_in_task(task):
@@ -35,7 +35,7 @@ def process_file(file_path):
     modified_lines = []
     modified = False
     for line in lines:
-        if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]"):  # Identify tasks, both complete and incomplete
+        if line.strip().startswith("- [ ]"):  # Identify tasks, both complete and incomplete
             new_line = move_tags_in_task(line)
             modified_lines.append(new_line)
             if new_line != line:
