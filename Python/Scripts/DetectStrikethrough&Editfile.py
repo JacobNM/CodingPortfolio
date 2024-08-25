@@ -23,8 +23,8 @@ def process_strikethrough_files_in_vault(folder_path):
                     for task in completed_tasks:
                         match = re.match(r"((#\S+\s+)+)(.+)", task)
                         if match:
-                            tags = match.group(1)
-                            content = match.group(3)
+                            tags = match.group(1) # Tags at the beginning
+                            content = match.group(3) # The actual task content without the initial tags
                             new_task = f"{content.strip()} {tags.strip()}"
                             print(f"Modified task: {new_task}")
                             # Write the modified task back to the file
