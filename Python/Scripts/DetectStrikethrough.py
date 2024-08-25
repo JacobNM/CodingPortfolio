@@ -15,6 +15,7 @@ def process_files_in_folder(folder_path):
                 completed_tasks = re.findall(r"- \[x\] (.*?)\n", file_content)
                 if completed_tasks:
                     print(f"Detected tasks with strikethrough in {file_path}:")
+                    print(completed_tasks)
     print("Done!")                
                 
 # Function to process each individual file
