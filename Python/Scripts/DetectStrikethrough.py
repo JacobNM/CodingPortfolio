@@ -1,6 +1,9 @@
 import re
 import os
 
+# Replace this with the path to the folder containing your markdown files
+folder_path = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
+
 # Function to process all markdown files in a folder
 def process_files_in_folder(folder_path):
     print(f"Processing files in folder: {folder_path}\n")
@@ -24,7 +27,5 @@ def process_file(file_path):
         file_content = f.readlines()
             
     
-# Replace this with the path to the folder containing your markdown files
-folder_path = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
 
 process_files_in_folder(folder_path)            
