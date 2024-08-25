@@ -2,7 +2,12 @@ import re
 import os
 
 # Replace this with the path to the folder containing your markdown files
-folder_path = "/Users/jacob/My Drive/Obsidian Vaults/Obsidian - Personal Vault"
+folder_path = "/path/to/your/folder"
+
+# Function to process each individual file
+def process_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        files = f.readlines()
 
 # Function to process all strikethrough files in a vault folder
 def process_strikethrough_files_in_vault(folder_path):
@@ -12,7 +17,7 @@ def process_strikethrough_files_in_vault(folder_path):
             if file.endswith(".md"):
                 file_path = os.path.join(root, file)
                 process_file(file_path)
-                # Additional code to detect strikethrough in completed Obsidian tasks
+                # Detect strikethrough in completed Obsidian tasks
                 with open(file_path, 'r', encoding='utf-8') as f:
                     file_content = f.read()
                 completed_tasks = re.findall(r"- \[x\] (.*?)\n", file_content)
@@ -32,14 +37,8 @@ def process_strikethrough_files_in_vault(folder_path):
                                 file_content = f.read()
                             file_content = file_content.replace(f"- [x] {task}", f"- [x] {new_task}")
                             with open(file_path, 'w', encoding='utf-8') as f:
-                                f.write(file_content)                             
-                        
-    print("Done!")                
-                
-# Function to process each individual file
-def process_file(file_path):
-    with open(file_path, 'r', encoding='utf-8') as f:
-        files = f.readlines()
+                                f.write(file_content)
+    print("Done!")
 
 # Activate the function to process the files in the folder
 process_strikethrough_files_in_vault(folder_path)
