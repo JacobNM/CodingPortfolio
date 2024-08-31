@@ -102,4 +102,5 @@ def using_reduce_tool_in_math_operations():
     result2 = functools.reduce(multiply, [2, 3, 4], 1)
     print(f"result2 variable is equal to {result2}.")
     
-using_reduce_tool_in_math_operations()
+# Remove comment from following line to activate function.
+#using_reduce_tool_in_math_operations()
