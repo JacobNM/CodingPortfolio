@@ -14,7 +14,7 @@ def testing_iterators():
 def add_ten(item):
         return item + 10
 
-def map_transforms_elements_of_a_list():
+def test_map_transforms_elements_of_a_list():
     seq = [1, 2, 3]
     mapped_seq = list()
 
@@ -23,7 +23,7 @@ def map_transforms_elements_of_a_list():
     if list == mapping.__class__:
         print(f"True. mapping_class is a {mapping.__class__}")
     else:
-        print(f"False. mapping_class is a {mapping.__class__}")
+        print(f"False. mapping_class is a part of the '{mapping.__class__.__name__}' class.")
     # In Python 3 built in iterator funcs return iterable view objects
     # instead of lists
 
@@ -33,7 +33,6 @@ def map_transforms_elements_of_a_list():
        
 # Uncomment the following line to activate function
 #test_map_transforms_elements_of_a_list()
-
 
 def filter_even_numbers_from_a_list():
     
@@ -83,3 +82,24 @@ def filter_returns_words_bigger_than_four_chars():
 # Uncomment following line to activate func        
 #filter_returns_words_bigger_than_four_chars()
 
+def add(accum,item):
+    return accum + item
+
+def multiply(accum,item):
+    return accum * item
+
+def using_reduce_tool_in_math_operations():
+    import functools
+    # As of Python 3 reduce() has been demoted from a builtin function
+    # to the functools module.
+
+    result = functools.reduce(add, [2, 3, 4])
+    print(f"result variable is part of the '{result.__class__.__name__}' class.")
+    # Reduce() syntax is same as Python 2
+
+    print(f"result variable is equal to {result}.")
+
+    result2 = functools.reduce(multiply, [2, 3, 4], 1)
+    print(f"result2 variable is equal to {result2}.")
+    
+using_reduce_tool_in_math_operations()
