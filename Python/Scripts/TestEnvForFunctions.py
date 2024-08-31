@@ -79,6 +79,7 @@ def filter_returns_words_bigger_than_four_chars():
         pass
     except StopIteration:
         msg = 'Ran out of big names'
-
+        print(msg)
 # Uncomment following line to activate func        
 #filter_returns_words_bigger_than_four_chars()
+
