@@ -104,3 +104,34 @@ def using_reduce_tool_in_math_operations():
     
 # Remove comment from following line to activate function.
 #using_reduce_tool_in_math_operations()
+
+def test_all_iteration_methods_work_on_any_sequence_not_just_lists():
+    # Ranges are an iterable sequence
+    result = map(add_ten, range(1,4))
+    print(list(result))
+
+# Uncomment following line to activate func
+#test_all_iteration_methods_work_on_any_sequence_not_just_lists()
+
+def test_use_pass_for_iterations_with_no_body():
+    for num in range(1,5):
+        pass
+    print(f"num variable is equal to {num}.")
+
+# Uncomment following line to activate func
+#test_use_pass_for_iterations_with_no_body()
+
+def test_lines_in_a_file_are_iterable_sequences_too():
+    def make_upcase(line):
+        return line.strip().title()
+
+    # Path to file to open: Python/Examples/example_file.txt
+    file_path = "Python/Examples/example_file.txt"    
+
+    file = open(file_path)
+    upcase_lines = map(make_upcase, file.readlines())
+    print(list(upcase_lines))
+    file.close()
+
+# Uncomment following line to activate func
+#test_lines_in_a_file_are_iterable_sequences_too()
