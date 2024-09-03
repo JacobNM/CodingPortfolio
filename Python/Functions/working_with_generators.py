@@ -10,6 +10,8 @@ def test_generating_values_on_the_fly():
     print(f"\t- {result[1]}")
     print(f"\t- {result[2]}")
     
+    print(f"\nThis is the format of the list:\n{result}")
+    
 # Remove hash below to test
-#test_generating_values_on_the_fly()
+test_generating_values_on_the_fly()
 
