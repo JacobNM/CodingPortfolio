@@ -80,5 +80,4 @@ def test_creating_a_dictionary_with_dictionary_comprehension():
     print(f"\t- {(dict_comprehension['FOURTH'])}")
     
 # Remove hash below to test
-test_creating_a_dictionary_with_dictionary_comprehension()
-
+#test_creating_a_dictionary_with_dictionary_comprehension()
