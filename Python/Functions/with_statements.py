@@ -43,6 +43,7 @@ def test_finding_lines():
 # Remove hash below to activate function
 #test_finding_lines()
 
+
   
  ## The count_lines and find_line are similar, and yet different.
     ## They both follow the pattern of "sandwich code".
@@ -64,16 +65,16 @@ def test_finding_lines():
     ## following code:
 
 class FileContextManager():
-    def __init__(file_path):
-        file_path = file_path
-        file = None
+    def __init__(self, file_path):
+        self._file_path = file_path
+        self._file = None
 
-    def __enter__(file_path):
-        file = open(file_path)
-        return file
+    def __enter__(self):
+        self._file = open(self._file_path)
+        return self._file
 
-    def __exit__(file, cls, value, tb):
-        file.close()
+    def __exit__(self, cls, value, tb):
+        self._file.close()
 
 def count_lines2(file_path):
     with FileContextManager(file_path) as file:
@@ -83,4 +84,4 @@ def test_counting_lines2():
     print(count_lines2("Python/Examples/example_file.txt"))
 
 # Remove hash below to activate function
-test_counting_lines2()
+#test_counting_lines2()
