@@ -1,3 +1,5 @@
+import random
+
 # Greed is a dice game where you roll up to five dice to accumulate
 # points.  The following "score" function will be used to calculate the
 # score of a single roll of the dice.
@@ -15,7 +17,6 @@
 #
 # * Everything else is worth 0 points.
 #
-#
 # Examples:
 #
 # score([1,1,1,5,1]) => 1150 points
@@ -25,7 +26,21 @@
 #
 # More scoring examples are given in the tests below:
 
-# Function to calculate the score of 6 dice rolls
+# Create a class to represent a set of dice
+class DiceSet:
+    def __init__(self):
+        self._values = None
+
+    @property
+    def values(self):
+        return self._values
+
+    def roll(self, n):
+        # Generate random numbers for n dice
+        self._values = [random.randint(1, 6) for _ in range(n)]
+        pass
+
+# Function to calculate the score of dice rolls
 def score(dice):
     score = 0
     counts = [0] * 7
@@ -45,6 +60,62 @@ def score(dice):
     score += counts[5] * 50
 
     return score
+
+def test_can_create_a_dice_set():
+        dice = DiceSet()
+        print(dice)
+
+# Remove hash below to activate function
+#test_can_create_a_dice_set()
+
+def test_rolling_the_dice_returns_a_set_of_integers_between_1_and_6():
+    dice = DiceSet()
+
+    dice.roll(8)
+    print(isinstance(dice.values, list))
+    print(len(dice.values))
+    for value in dice.values:
+        print(f"{(value >= 1 and value <= 6)}. Value is between 1 and 6: {value}")
+
+# Remove hash below to activate function
+#test_rolling_the_dice_returns_a_set_of_integers_between_1_and_6()
+
+def test_dice_values_do_not_change_unless_explicitly_rolled():
+    dice = DiceSet()
+    dice.roll(5)
+    first_time = dice.values
+    second_time = dice.values
+    print(first_time)
+    print(second_time)
+
+# Remove hash below to activate function
+#test_dice_values_do_not_change_unless_explicitly_rolled()
+
+def test_dice_values_should_change_between_rolls():
+    dice = DiceSet()
+
+    dice.roll(5)
+    first_time = dice.values
+
+    dice.roll(5)
+    second_time = dice.values
+
+    print(first_time)
+    print(second_time)
+
+# Remove hash below to activate function
+#test_dice_values_should_change_between_rolls()
+
+def test_you_can_roll_different_numbers_of_dice():
+    dice = DiceSet()
+    dice.roll(3)
+    print(dice.values)
+    dice.roll(1)
+    print(dice.values)
+
+# Remove hash below to activate function
+#test_you_can_roll_different_numbers_of_dice()
+
 
 class GreedGameScoringProject():
     def test_score_of_an_empty_list_is_zero():
@@ -99,7 +170,7 @@ class GreedGameScoringProject():
         print(score([1,1,1,5,1]))
 
     # Remove hash below to activate function
-    #test_score_of_mixed_is_sum()
+    test_score_of_mixed_is_sum()
     
     def test_ones_not_left_out():
         print(score([1,2,2,2]))
