@@ -149,21 +149,22 @@ def test_different_objects_have_different_instance_variables():
 # ------------------------------------------------------------------
 
 class Dog6:
-    def __init__(Dog6, initial_name):
-        Dog6._name = initial_name
+    def __init__(pup, initial_name):
+        pup._name = initial_name
 
-    def get_self(Dog6):
-        return Dog6
+    def get_self(pup):
+        return pup
     
-    def __str__(Dog6):
-        return Dog6._name
+    def __str__(pup):
+        return pup._name
     
-    def __repr__(Dog6):
-        return "Dog named '" + Dog6._name + "'"
+    def __repr__(pup):
+        return "<Dog named '" + pup._name + "'>"
     
 def test_inside_a_method_self_refers_to_the_containing_object():
+    # Function will return "<Dog named 'Fido'>"
     fido = Dog6("Fido")
-    print(fido.get_self()) # This is not a string, but a reference to the object
+    print(fido.get_self())
     
 # Remove hash below to activate function
 #test_inside_a_method_self_refers_to_the_containing_object()
@@ -199,4 +200,4 @@ def test_all_objects_support_str_and_repr():
     print(repr("STRING"))
 
 # Remove hash below to activate function
-#test_all_objects_support_str_and_repr()    
+#test_all_objects_support_str_and_repr()
