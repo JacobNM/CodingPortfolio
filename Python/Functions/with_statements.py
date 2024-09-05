@@ -85,3 +85,47 @@ def test_counting_lines2():
 
 # Remove hash below to activate function
 #test_counting_lines2()
+
+# ------------------------------------------------------------------
+
+def find_line2(file_path):
+    with FileContextManager(file_path) as file:
+        for line in file.readlines():
+            match = re.search('e', line)
+            if match:
+                return line
+
+def test_finding_lines2():
+    print(find_line2("Python/Examples/example_file.txt"))
+
+# Remove hash below to activate function
+#test_finding_lines2()
+
+# ------------------------------------------------------------------
+
+def count_lines3(file_path):
+    with open(file_path) as file:
+        return len(file.readlines())
+    
+def test_open_already_has_its_own_built_in_context_manager():
+    print(count_lines3("Python/Examples/example_file.txt"))
+
+# Remove hash below to activate function
+#test_open_already_has_its_own_built_in_context_manager()
+
+# ------------------------------------------------------------------
+
+# Next find_line3 function will find all lines containing the letter 'e'
+
+def find_line3(file_path):
+    with open(file_path) as file:
+        for line in file.readlines():
+            match = re.search('e', line)
+            if match:
+                print(line)
+
+def test_finding_lines3():
+    find_line3("Python/Examples/example_file.txt")
+
+# Remove hash below to activate function
+#test_finding_lines3()
