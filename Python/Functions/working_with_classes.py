@@ -159,7 +159,7 @@ class Dog6:
         return Dog6._name
     
     def __repr__(Dog6):
-        return "<Dog named '" + Dog6._name + "'>"
+        return "Dog named '" + Dog6._name + "'"
     
 def test_inside_a_method_self_refers_to_the_containing_object():
     fido = Dog6("Fido")
@@ -169,21 +169,21 @@ def test_inside_a_method_self_refers_to_the_containing_object():
 #test_inside_a_method_self_refers_to_the_containing_object()
 
 def test_str_provides_a_string_version_of_the_object():
-    fido = Dog6("Fido")
+    fido = Dog6("Milo")
     print(str(fido))
 
 # Remove hash below to activate function
 #test_str_provides_a_string_version_of_the_object()
 
 def test_str_is_used_explicitly_in_string_interpolation():
-    fido = Dog6("Fido")
+    fido = Dog6("Pluto")
     print(f"My dog is " + str(fido))
 
 # Remove hash below to activate function
 #test_str_is_used_explicitly_in_string_interpolation()
 
 def test_repr_provides_a_string_representation_of_the_object():
-    fido = Dog6("Fido")
+    fido = Dog6("Clifford")
     print(repr(fido))
     
 # Remove hash below to activate function
