@@ -68,19 +68,19 @@ class FileContextManager():
         file_path = file_path
         file = None
 
-    def __enter__():
+    def __enter__(file_path):
         file = open(file_path)
         return file
 
-    def __exit__(self, cls, value, tb):
-        self._file.close()
+    def __exit__(file, cls, value, tb):
+        file.close()
 
-    def count_lines2(self, file_path):
-        with FileContextManager(file_path) as file:
-            return len(file.readlines())
+def count_lines2(file_path):
+    with FileContextManager(file_path) as file:
+        return len(file.readlines())
+    
+def test_counting_lines2():
+    print(count_lines2("Python/Examples/example_file.txt"))
 
-    def find_line(self):
-        for line in self._file.readlines():
-            match = re.search('e', line)
-            if match:
-                return line
+# Remove hash below to activate function
+test_counting_lines2()
