@@ -78,6 +78,55 @@ def test_inner_functions_are_unbound():
         print(e)
 
 # Remove hash below to activate function
-test_inner_functions_are_unbound()
+#test_inner_functions_are_unbound()
 
 # ------------------------------------------------------------------
+
+class BoundClass:
+    def __get__(self, obj, cls):
+        return (self, obj, cls)
+
+binding = BoundClass()
+
+def test_get_descriptor_resolves_attribute_binding():
+    #bound_obj, binding_owner, owner_type = binding
+    # Look at BoundClass.__get__():
+    #   bound_obj = self
+    #   binding_owner = obj
+    #   owner_type = cls
+    
+    print(BoundClass.__get__(binding, None, None))
+    
+    #print(bound_obj.__class__.__name__)
+    #print(binding_owner.__class__.__name__)
+    #print(owner_type.__name__)
+
+# Remove hash below to activate function
+#test_get_descriptor_resolves_attribute_binding()
+
+# ------------------------------------------------------------------
+
+class SuperColor:
+    def __init__(self):
+        self.choice = None
+    
+    def __set__(self, obj, val):
+        self.choice = val
+
+color = SuperColor()
+
+def test_set_descriptor_changes_behavior_of_attribute_assignment():
+    
+    try:
+        if color.choice == None:
+            print(f"Error: color.choice is currently set to None")
+        else:
+            print(f"color.choice is {(color.choice)}")
+    except UnboundLocalError as e:
+        print(e)
+    
+    color.__set__(color, "blue")
+    print(f"Color is set to {(color.choice)}")
+
+# Remove hash below to activate function
+#test_set_descriptor_changes_behavior_of_attribute_assignment()
