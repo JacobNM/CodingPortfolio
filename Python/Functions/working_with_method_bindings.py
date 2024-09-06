@@ -89,17 +89,16 @@ class BoundClass:
 binding = BoundClass()
 
 def test_get_descriptor_resolves_attribute_binding():
-    #bound_obj, binding_owner, owner_type = binding
+    bound_obj, binding_owner, owner_type = binding 
     # Look at BoundClass.__get__():
     #   bound_obj = self
     #   binding_owner = obj
     #   owner_type = cls
+    print(BoundClass.__get__.__name__)
     
-    print(BoundClass.__get__(binding, None, None))
-    
-    #print(bound_obj.__class__.__name__)
-    #print(binding_owner.__class__.__name__)
-    #print(owner_type.__name__)
+    print(bound_obj.__class__.__name__)
+    print(binding_owner.__class__.__name__)
+    print(owner_type)
 
 # Remove hash below to activate function
 #test_get_descriptor_resolves_attribute_binding()
