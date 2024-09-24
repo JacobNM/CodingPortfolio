@@ -1,3 +1,5 @@
+# Import the regular expression module to use regex in functions
+import re
 class Nameable:
     def __init__(self):
         self._name = None
@@ -137,3 +139,25 @@ def test_we_can_inspect_the_method_resolution_order():
     
 # Remove hash to activate function
 #test_we_can_inspect_the_method_resolution_order()
+
+def test_confirm_the_mro_controls_the_calling_order():
+    jeff = Spiderpig()
+    
+    # Use Regex to confirm the word Spiderpig is in the method "here()"
+    #print(re.search('Spiderpig', jeff.here()))
+    # Print the match object from the search
+    print(f"{re.search('Spiderpig', jeff.here()).group()} found {jeff.here()}")
+    
+    next = super(Spiderpig, jeff)
+    print(f"{re.search('Pig', next.here()).group()} found {next.here()}")
+
+    next = super(Pig, jeff)
+    print(f"{re.search('Spider', next.here()).group()} found {next.here()}")
+    
+    next = super(Spider, jeff)
+    print(f"{re.search('Animal', next.here()).group()} found {next.here()}")
+
+# Remove hash to activate function
+#test_confirm_the_mro_controls_the_calling_order()
+
+# ------------------------------------------------------------------
