@@ -11,7 +11,7 @@ class Dog:
 
 class Chihuahua(Dog):
     def wag(self):
-        return "happy"
+        return "Wag, wag, wag"
 
     def bark(self):
         return "yip"
@@ -40,4 +40,36 @@ def test_instances_inherit_behavior_from_parent_class():
 
 # Remove hash below to activate function
 #test_instances_inherit_behavior_from_parent_class()
+
+def test_subclasses_add_new_behavior():
+    chico = Chihuahua("Chico")
+    # Chico can wag his tail because wag() is an attribute of Chihuahua
+    print(f"{chico.wag()} goes the {Chihuahua.__name__} named {chico._name}'s tail")
+    fido = Dog("Fido")
+    
+    # Raise attribute error because wag() is not an attribute of Dog
+    try:
+        print(f"{fido.wag()} goes the {Dog.__name__} named {fido._name}'s tail")
+    except AttributeError as error:
+        # Print attribute error message "object has not attribute"
+        print(error)
+        print(f"This is an {AttributeError.__name__}.")
+        print(f"{Dog.__name__} named {fido._name} does not wag")
+        
+    # Fido can bark because bark() is an attribute of Dog
+    print(f"{fido.bark()} is the sound the {Dog.__name__} named {fido._name} makes")
+
+# Remove hash below to activate function
+test_subclasses_add_new_behavior()
+
+def test_subclasses_can_modify_existing_behavior():
+    chico = Chihuahua("Chico")
+    print(f"{chico.bark()} goes the {Chihuahua.__name__} named {chico._name}")
+    fido = Dog("Fido")
+    print(f"{fido.bark()} goes the {Dog.__name__} named {fido._name}")
+    
+# Remove hash below to activate function
+#test_subclasses_can_modify_existing_behavior()
+
+# ------------------------------------------------------------------
 
