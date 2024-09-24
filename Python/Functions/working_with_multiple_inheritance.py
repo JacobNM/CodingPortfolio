@@ -136,4 +136,4 @@ def test_we_can_inspect_the_method_resolution_order():
         print(f"{IndexError.__name__} when attempting to call method resolution order number. {error}")    
     
 # Remove hash to activate function
-test_we_can_inspect_the_method_resolution_order()
+#test_we_can_inspect_the_method_resolution_order()
