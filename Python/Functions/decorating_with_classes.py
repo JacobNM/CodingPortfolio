@@ -91,3 +91,53 @@ def test_what_a_decorator_is_doing_to_a_function():
 #test_what_a_decorator_is_doing_to_a_function()
 
 # ------------------------------------------------------------------
+
+class documenter:
+    def __init__(self, *args):
+        self.fn_doc = args[0]
+
+    def __call__(self, fn):
+        def decorated_function(*args):
+            return fn(*args)
+
+        if fn.__doc__:
+            decorated_function.__doc__ = fn.__doc__ + ": " + self.fn_doc
+        else:
+            decorated_function.__doc__ = self.fn_doc
+        return decorated_function
+
+@documenter("Increments a number by one...kind of.")
+def count_by_one(number):
+    number += 1
+    if number == 3:
+        return 5
+    else:
+        return number
+@documenter("Does nothing")
+def idler(number):
+    "Idler"
+    pass
+
+def test_decorator_with_an_argument():
+    print(count_by_one(2))
+    print(count_by_one.__doc__)
+    print(idler(2))
+    print(idler.__doc__)
+
+# Remove hash below to activate function
+#test_decorator_with_an_argument()
+
+# ------------------------------------------------------------------
+
+@documenter("DOH!")
+@doubleit
+@doubleit
+def homer():
+    return "D'oh"
+
+def test_we_can_chain_decorators():
+    print(homer())
+    print(homer.__doc__)
+    
+# Remove hash below to activate function
+#test_we_can_chain_decorators()
