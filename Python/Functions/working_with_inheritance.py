@@ -60,7 +60,7 @@ def test_subclasses_add_new_behavior():
     print(f"{fido.bark()} is the sound the {Dog.__name__} named {fido._name} makes")
 
 # Remove hash below to activate function
-test_subclasses_add_new_behavior()
+#test_subclasses_add_new_behavior()
 
 def test_subclasses_can_modify_existing_behavior():
     chico = Chihuahua("Chico")
@@ -73,3 +73,54 @@ def test_subclasses_can_modify_existing_behavior():
 
 # ------------------------------------------------------------------
 
+class BullDog(Dog):
+    def bark(self):
+        return super().bark() + ", GRR"
+        # Note, super() is much simpler to use in Python 3!
+
+def test_subclasses_can_invoke_parent_behavior_via_super():
+    ralph = BullDog("Ralph")
+    print(f"{ralph.bark()} goes the {BullDog.__name__} named {ralph._name}")
+
+# Remove hash below to activate function
+#test_subclasses_can_invoke_parent_behavior_via_super()
+
+class GreatDane(Dog):
+    def growl(self):
+        return super().bark() + ", GROWL"
+
+def test_super_works_across_methods():
+    george = GreatDane("George")
+    print(f"{george.growl()} goes the {GreatDane.__name__} named {george._name}")
+
+# Remove hash below to activate function
+#test_super_works_across_methods()
+
+# ------------------------------------------------------------------
+
+class Pug(Dog):
+    def __init__(self, name):
+        pass
+
+class Greyhound(Dog):
+    def __init__(self, name):
+        super().__init__(name)
+
+def test_base_init_does_not_get_called_automatically():
+    snoopy = Pug("Snoopy")
+    try:
+        print(f"{snoopy.name} is the name of the {Pug.__name__} named {snoopy._name}")
+    except AttributeError as error:
+        print(error)
+        print(f"This is an {AttributeError.__name__}.")
+        print(f"{Pug.__name__} does not have a name")
+
+# Remove hash below to activate function
+test_base_init_does_not_get_called_automatically()
+
+def test_base_init_has_to_be_called_explicitly():
+    boxer = Greyhound("Boxer")
+    print(f"{boxer.name} is the name of the {Greyhound.__name__} named {boxer._name}")
+    
+# Remove hash below to activate function
+#test_base_init_has_to_be_called_explicitly()
