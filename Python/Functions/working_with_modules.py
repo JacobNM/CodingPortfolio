@@ -57,3 +57,46 @@ def test_importing_all_module_attributes_at_once():
 
 # Remove hash below to activate function
 #test_importing_all_module_attributes_at_once()
+
+def test_modules_hide_attributes_prefixed_by_underscores():
+    try:
+        private_squirrel = _SecretSquirrel()
+    except NameError as ex:
+        print(NameError.__name__)
+        print(ex)
+
+# Remove hash below to activate function
+#test_modules_hide_attributes_prefixed_by_underscores()
+
+def test_private_attributes_are_still_accessible_in_modules():
+    from local_module import Duck # local_module.py
+    duck = Duck()
+    print(f"{duck._password == 'password'}. {duck._password} is equal to {Duck()._password}")
+    # module level attribute hiding doesn't affect class attributes
+    # (unless the class itself is hidden).
+
+# Remove hash below to activate function
+#test_private_attributes_are_still_accessible_in_modules()
+
+def test_a_module_can_limit_wildcard_imports():
+    """
+    Examine results of:
+        from local_module_with_all_defined import *
+    """
+    
+    # Goat is on the __all__ list
+    goat = Goat()
+    print(goat.name)
+
+    # How about velociraptors? Yep, he's on the list
+    dinosaur = _Velociraptor()
+    print(dinosaur.name)
+    
+    # SecretDuck? Nah, not on the list
+    try:
+        secret_duck = SecretDuck()
+    except NameError as ex:
+        print(f"{NameError.__name__} is raised. {ex}")
+
+# Remove hash below to activate function
+#test_a_module_can_limit_wildcard_imports()
