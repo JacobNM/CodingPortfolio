@@ -32,9 +32,9 @@ def test_use_absolute_imports_to_import_upper_level_modules():
 
 def test_import_a_module_in_a_subfolder_folder_using_an_absolute_path():
     # Import /Python/Functions/local_module.py
-    from Functions.donalds_module.donald import Duck
+    from donalds_module.donald import Duck
 
     print(Duck.__module__)
 
 # Remove hash to activate function
-test_import_a_module_in_a_subfolder_folder_using_an_absolute_path()
+#test_import_a_module_in_a_subfolder_folder_using_an_absolute_path()
