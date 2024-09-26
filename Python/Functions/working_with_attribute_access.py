@@ -56,3 +56,11 @@ def test_intercepting_return_values_can_disrupt_the_call_chain():
 # Remove hash below to activate function
 #test_intercepting_return_values_can_disrupt_the_call_chain()
 
+def test_changes_to_the_getattribute_implementation_affects_getattr_function():
+    catcher = CatchAllAttributeReads()
+    print(getattr(catcher, 'any_attribute'))
+
+# Remove hash below to activate function
+#test_changes_to_the_getattribute_implementation_affects_getattr_function()
+
+# ------------------------------------------------------------------
