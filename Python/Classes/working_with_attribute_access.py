@@ -318,3 +318,26 @@ def test_it_modifies_external_attribute_as_expected():
     
 # Remove hash below to activate function
 #test_it_modifies_external_attribute_as_expected()
+
+def test_it_mangles_some_internal_attributes():
+    setter = ScarySetter()
+    
+    try:
+        coconuts = setter.num_of_coconuts
+        print(coconuts)
+    except AttributeError as ex:
+        print(f"\n{AttributeError.__name__} has been raised. {ex}.")
+        coconuts = setter.altered_num_of_coconuts
+        print(f"\n{coconuts} is the value for the new attribute, 'altered_num_of_coconuts'.")
+    
+# Remove hash below to activate function
+#test_it_mangles_some_internal_attributes()
+
+def test_in_this_case_private_attributes_are_not_mangled():
+    setter = ScarySetter()
+    
+    coconuts = setter._num_of_private_coconuts
+    print(f"{coconuts} is the value for the private attribute, '_num_of_private_coconuts'.")
+    
+# Remove hash below to activate function
+#test_in_this_case_private_attributes_are_not_mangled()
