@@ -108,13 +108,14 @@ def test_dice_values_should_change_between_rolls():
 
 def test_you_can_roll_different_numbers_of_dice():
     dice = DiceSet()
-    dice.roll(3)
+    dice.roll(6)
     print(dice.values)
+    print(f"Your score for this roll is {score(dice.values)}")
     dice.roll(1)
     print(dice.values)
 
 # Remove hash below to activate function
-#test_you_can_roll_different_numbers_of_dice()
+test_you_can_roll_different_numbers_of_dice()
 
 
 class GreedGameScoringProject():
@@ -170,7 +171,7 @@ class GreedGameScoringProject():
         print(score([1,1,1,5,1]))
 
     # Remove hash below to activate function
-    test_score_of_mixed_is_sum()
+    #test_score_of_mixed_is_sum()
     
     def test_ones_not_left_out():
         print(score([1,2,2,2]))
