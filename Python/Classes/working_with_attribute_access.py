@@ -253,7 +253,7 @@ def test_setattr_intercepts_attribute_assignments():
     #print(fanboy.my_other_attributes)
 
 # Remove hash below to activate function
-test_setattr_intercepts_attribute_assignments()
+#test_setattr_intercepts_attribute_assignments()
 
 # ------------------------------------------------------------------
 # Class inspired by the PossessiveSetter class
@@ -271,7 +271,7 @@ class NewAttributeSetter(object):
             else:
                 # If the current value is not a list, create a list with the current value and the new value
                 setattr(self, new_attr_name, [current_value, value])
-            # Return to retain the values stored in the attribute
+            # Return to retain the values stored in each attribute
             return
         else:
             # Value is not a list, so create a list with the value
@@ -292,7 +292,7 @@ def test_setattr_adds_new_attributes_to_dict():
     print(fanboy.__dict__)
     
 # Remove hash below to activate function
-test_setattr_adds_new_attributes_to_dict()
+#test_setattr_adds_new_attributes_to_dict()
 
 # ------------------------------------------------------------------
 
