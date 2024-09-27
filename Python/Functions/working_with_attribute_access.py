@@ -192,33 +192,65 @@ def test_getattr_only_catches_unknown_attributes():
 # ------------------------------------------------------------------
 
 class PossessiveSetter(object):
+    # Register attributes in the class
     def __init__(self):
         self.my_comics = []
         self.my_pies = []
-
-
-        
+        self.my_other_attributes = []
+    
+    # Intercept attribute assignments
     def __setattr__(self, attr_name, value):
+        # Create new attribute names
         if attr_name[-5:] == 'comic':
+            # If not already created, create my_comics list
+            if not hasattr(self, 'my_comics'):
+                # Set my_comics to an empty list
+                self.my_comics = []
+                # Add the comic(s) to the list
             self.my_comics.append(value)
+            
+        # If the attribute is a pie, add it to the my_pies list
         elif attr_name[-3:] == 'pie':
+            if not hasattr(self, 'my_pies'):
+                self.my_pies = []
             self.my_pies.append(value)
+        
+        # If the attribute is not a comic or pie, add it to the my_other_attributes list
+        elif attr_name not in ['my_comics', 'my_pies', 'my_other_attributes']:
+            # If my_other_attributes does not exist, create it
+            if not hasattr(self, 'my_other_attributes'):
+                # Set my_other_attributes to an empty list
+                self.my_other_attributes = []
+            # Add the attribute(s) to the list
+            self.my_other_attributes.append(value)
+        
+        # If the attribute is a comic, pie, or other attribute, set the attribute
         else:
             object.__setattr__(self, attr_name, value)
 
 def test_setattr_intercepts_attribute_assignments():
+    # Create an instance of the PossessiveSetter class
     fanboy = PossessiveSetter()
-
+    # Assign values to the comic attribute
     fanboy.comic = 'The Laminator, issue #1'
+    # Assign values to the pie attribute
     fanboy.pie = 'apple'
+    # Assign values to the sandwich attribute
     fanboy.sandwich = 'ham and cheese'
+    # Assign another value to the comic attribute
     fanboy.comic = 'The Laminator, issue #2'
+    # Assign another value to the pie attribute
     fanboy.pie = 'blueberry'
+    # Assign another value to the sandwich attribute
     fanboy.sandwich = 'turkey and swiss'
 
+    # Print the dictionary of the fanboy object
     print(fanboy.__dict__)
-    print(fanboy.my_comics)
-    print(fanboy.my_pies)
+    
+    # Remove hashes below to print the lists of the fanboy object
+    #print(fanboy.my_comics)
+    #print(fanboy.my_pies)
+    #print(fanboy.my_other_attributes)
 
 # Remove hash below to activate function
 test_setattr_intercepts_attribute_assignments()
@@ -226,43 +258,41 @@ test_setattr_intercepts_attribute_assignments()
 # ------------------------------------------------------------------
 # Class inspired by the PossessiveSetter class
 class NewAttributeSetter(object):
-    def __init__(self):
-        pass
-        
+    # Register new attributes in the class when a new attribute is created
     def __setattr__(self, attr_name, value):
         new_attr_name = attr_name
+        # If the attribute already exists, append the new value to the list
         if hasattr(self, new_attr_name):
+            # Get the current value of the attribute
             current_value = getattr(self, new_attr_name)
+            # If the current value is a list, append the new value to the list
             if isinstance(current_value, list):
                 current_value.append(value)
-                # if there is an empty list in the value variable, remove the empty list
-                current_value = [x for x in current_value if x]
-                #setattr(self, new_attr_name, current_value)
             else:
+                # If the current value is not a list, create a list with the current value and the new value
                 setattr(self, new_attr_name, [current_value, value])
+            # Return to retain the values stored in the attribute
             return
         else:
-            # if there is an empty list in the value variable, remove the empty list
-            if value == []:
-                value = None    
+            # Value is not a list, so create a list with the value
             value = [value]
-        
+        # Set the attribute to the value
         object.__setattr__(self, attr_name, value)
 
 def test_setattr_adds_new_attributes_to_dict():
     fanboy = NewAttributeSetter()
 
-    fanboy.comic = 'The Laminator, issue #1'
-    fanboy.pie = 'apple'
-    fanboy.sandwich = 'ham and cheese'
-    fanboy.sandwich = 'turkey and swiss'
-    fanboy.comic = 'The Laminator, issue #2'
-    fanboy.pie = 'blueberry'
+    fanboy.comics = 'The Laminator, issue #1'
+    fanboy.pies = 'apple'
+    fanboy.sandwiches = 'ham and cheese'
+    fanboy.comics = 'The Laminator, issue #2'
+    fanboy.pies = 'blueberry'
+    fanboy.sandwiches = 'turkey and swiss'
 
     print(fanboy.__dict__)
     
 # Remove hash below to activate function
-#test_setattr_adds_new_attributes_to_dict()
+test_setattr_adds_new_attributes_to_dict()
 
 # ------------------------------------------------------------------
 
