@@ -113,6 +113,7 @@ def test_you_can_roll_different_numbers_of_dice():
     print(f"Your score for this roll is {score(dice.values)}")
     dice.roll(1)
     print(dice.values)
+    print(f"Your score for this roll is {score(dice.values)}")
 
 # Remove hash below to activate function
 test_you_can_roll_different_numbers_of_dice()
