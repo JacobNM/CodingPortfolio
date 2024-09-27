@@ -195,31 +195,16 @@ class PossessiveSetter(object):
     def __init__(self):
         self.my_comics = []
         self.my_pies = []
-        self.other_attributes = []
+
+
         
     def __setattr__(self, attr_name, value):
         if attr_name[-5:] == 'comic':
             self.my_comics.append(value)
         elif attr_name[-3:] == 'pie':
             self.my_pies.append(value)
-
         else:
-            new_attr_name = attr_name
-            if hasattr(self, new_attr_name):
-                current_value = getattr(self, new_attr_name)
-                if isinstance(current_value, list):
-                    current_value.append(value)
-                else:
-                    setattr(self, new_attr_name, [current_value, value])
-                return
-            else:
-                # if there is an empty list in the value variable, remove the empty list
-                if value == []:
-                    value = None
-
-                value = [value]
-            
-        object.__setattr__(self, attr_name, value)
+            object.__setattr__(self, attr_name, value)
 
 def test_setattr_intercepts_attribute_assignments():
     fanboy = PossessiveSetter()
@@ -227,14 +212,14 @@ def test_setattr_intercepts_attribute_assignments():
     fanboy.comic = 'The Laminator, issue #1'
     fanboy.pie = 'apple'
     fanboy.sandwich = 'ham and cheese'
-    fanboy.sandwich = 'turkey and swiss'
     fanboy.comic = 'The Laminator, issue #2'
     fanboy.pie = 'blueberry'
+    fanboy.sandwich = 'turkey and swiss'
 
     print(fanboy.__dict__)
     print(fanboy.my_comics)
     print(fanboy.my_pies)
-    
+
 # Remove hash below to activate function
 test_setattr_intercepts_attribute_assignments()
 
