@@ -192,32 +192,72 @@ def test_getattr_only_catches_unknown_attributes():
 # ------------------------------------------------------------------
 
 class PossessiveSetter(object):
+    def __init__(self):
+        self.my_comics = []
+        self.my_pies = []
+        
     def __setattr__(self, attr_name, value):
-        new_attr_name =  attr_name
-
         if attr_name[-5:] == 'comic':
-            new_attr_name = "my_" + new_attr_name
+            self.my_comics.append(value)
         elif attr_name[-3:] == 'pie':
-            new_attr_name = "a_" + new_attr_name
+            self.my_pies.append(value)
 
-        object.__setattr__(self, new_attr_name, value)
+        else:
+            new_attr_name = attr_name
+            if hasattr(self, new_attr_name):
+                current_value = getattr(self, new_attr_name)
+                if isinstance(current_value, list):
+                    current_value.append(value)
+                else:
+                    setattr(self, new_attr_name, [current_value, value])
+                return
+            else:
+                # if there is an empty list in the value variable, remove the empty list
+                if value == []:
+                    value = None
+
+                value = [value]
+            
+        object.__setattr__(self, attr_name, value)
 
 def test_setattr_intercepts_attribute_assignments():
     fanboy = PossessiveSetter()
+
     fanboy.comic = 'The Laminator, issue #1'
-    print(fanboy.my_comic)
     fanboy.pie = 'apple'
-    print(fanboy.a_pie)
-    
-    # Add another comic to the fanboy object
+    fanboy.sandwich = 'ham and cheese'
+    fanboy.sandwich = 'turkey and swiss'
     fanboy.comic = 'The Laminator, issue #2'
+    fanboy.pie = 'blueberry'
 
-    
-    # Change the prefix to make this next assert pass
-    #prefix = '__'
-    
     print(fanboy.__dict__)
-
+    print(fanboy.my_comics)
+    print(fanboy.my_pies)
     
 # Remove hash below to activate function
 test_setattr_intercepts_attribute_assignments()
+
+# ------------------------------------------------------------------
+
+class ScarySetter:
+    def __init__(self):
+        self.num_of_coconuts = 9
+        self._num_of_private_coconuts = 2
+    
+    def __setattr__(self, attr_name, value):
+        new_attr_name =  attr_name
+        
+        if attr_name[0] != '_':
+            new_attr_name = "altered_" + new_attr_name
+            
+        object.__setattr__(self, new_attr_name, value)
+        
+def test_it_modifies_external_attribute_as_expected():
+    setter = ScarySetter()
+    setter.e = "mc hammer"
+    print(setter.altered_e)
+    
+    print(setter.__dict__)
+    
+# Remove hash below to activate function
+#test_it_modifies_external_attribute_as_expected()
