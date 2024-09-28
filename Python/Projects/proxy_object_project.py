@@ -194,23 +194,33 @@ def test_it_also_turns_off():
     print(f"TV is off: {tv.is_off()}")
     
 # Remove hash below to activate function
-test_it_also_turns_off()
+# test_it_also_turns_off()
 
-def test_edge_case_on_off(self):
+def test_edge_case_on_off():
     tv = Television()
 
     tv.power()
     tv.power()
     tv.power()
-
-    self.assertTrue(tv.is_on())
+    
+    print(f"TV is on: {tv.is_on()}")
+    # self.assertTrue(tv.is_on())
 
     tv.power()
 
-    self.assertFalse(tv.is_on())
+    print(f"TV is off: {tv.is_off()}")
+    # self.assertFalse(tv.is_on())
+    
+# Remove hash below to activate function
+# test_edge_case_on_off()
 
-def test_can_set_the_channel(self):
+def test_can_set_the_channel():
     tv = Television()
 
     tv.channel = 11
-    self.assertEqual(11, tv.channel)
+    
+    print(f"TV channel: {tv.channel}")
+    # self.assertEqual(11, tv.channel)
+
+# Remove hash below to activate function
+# test_can_set_the_channel()
