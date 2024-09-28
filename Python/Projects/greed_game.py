@@ -156,7 +156,7 @@ def play_quick_greed_game():
     print(f"The winner is {str(winner)} with a score of {str(winner.score)}")
     
 # Remove the comment below to play the quick version of the game
-play_quick_greed_game()
+# play_quick_greed_game()
 
 def play_greed_game_in_turns():
     # Welcome message and game instructions
@@ -195,10 +195,12 @@ def play_greed_game_in_turns():
             input("Press Enter to roll the dice...")
             player.play()
             print(f"{player.name} rolled {player.score} points this turn.")
+            print(f"{player.name} has a total of {player.score} points.")
             if player.score >= 3000:
                 game.winner = player
                 break
             input("Press Enter to continue to the next player...")
+            os.system('cls' if os.name == 'nt' else 'clear')
     game = Game(players)
     winner = game.play_game()
     
@@ -208,4 +210,4 @@ def play_greed_game_in_turns():
     print(f"The winner is {str(winner)} with a score of {str(winner.score)}")
     
 # Remove the comment below to play the game
-# play_greed_game_in_turns()
+play_greed_game_in_turns()
