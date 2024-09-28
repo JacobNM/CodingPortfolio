@@ -149,4 +149,73 @@ def test_matching_any_character():
     print("Occurrences of 'a..xlx' in the string: ", re.findall('a..xl', string))
     
 # Remove hash below to activate function
-test_matching_any_character()
+# test_matching_any_character()
+
+def matching_set_character():
+    """
+        Lesson 6 -- Matching sets of characters
+
+        A set of characters is defined using the metacharacters
+        square brackets `[]`. For example, the regular expression
+        `[ae]` matches either 'a' or 'e'.
+    """
+    string = "sales.xlx\n"    \
+            + "sales1.xls\n"  \
+            + "orders3.xls\n" \
+            + "apac1.xls\n" \
+            + "sales2.xls\n" \
+            + "na1.xls\n"  \
+            + "na2.xls\n"  \
+            + "sa1.xls\n"  \
+            + "ca1.xls"
+                
+    # Find all files for North America(na) or South America(sa), but not (ca)
+    # Can use the pattern .a. which matches in above test,
+    # but in this case matches more than you want
+    
+    search_string_meh = '.a.'
+    # Find all occurrences of the search string in the string
+    regex_match_meh = re.findall(search_string_meh, string)
+    # Print the occurrences of the search string in the string in a list
+    print("Occurrences of the first search string in the string: ", regex_match_meh)
+    
+    
+    search_string_better = '[sn]a[1-9].xls'
+    # Find all occurrences of the search string in the string
+    regex_match = re.findall(search_string_better, string)
+    # Print the occurrences of the search string in the string in a list
+    print("Occurrences of the second search string in the string: ", regex_match)
+    
+# Remove hash below to activate function
+# matching_set_character()
+
+def test_anything_but_matching():
+    """
+        Lesson 7 -- Using character set ranges
+
+        Occasionally, you'll have a list of characters that you don't
+        want to match. Character sets can be negated using the `^`
+        metacharacter.
+    """
+    string = "sales.xlx\n"    \
+            + "sales1.xls\n"  \
+            + "orders3.xls\n" \
+            + "apac1.xls\n" \
+            + "sales2.xls\n"  \
+            + "sales3.xls\n"  \
+            + "europe2.xls\n"  \
+            + "sam.xls\n"  \
+            + "na1.xls\n"  \
+            + "na2.xls\n"  \
+            + "sa1.xls\n"  \
+            + "ca1.xls"
+    
+    # Find the name Sam
+    search_string = '[^nc]am.xls'
+    # Find all occurrences of the search string in the string
+    regex_match = re.findall(search_string, string)
+    # Print the occurrences of the search string in the string in a list
+    print("Occurrences of the search string in the string: ", regex_match)
+    
+# Remove hash below to activate function
+# test_anything_but_matching()
