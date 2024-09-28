@@ -39,6 +39,17 @@ class ClosingSale:
     def jellies(self):
         return 5
     
+    def animal_library(self):
+        return f"{self.hamsters} hamsters, {self.zebras} zebras"
+    
+    def hamsters(self):
+        return self.animal_library()[0:10]
+    
+    def zebras(self):
+        return self.animal_library()[12:20]
+
+    
+    
 def test_del_can_remove_attributes():
     crazy_discounts = ClosingSale()
     # List attributes found in __init__
@@ -140,7 +151,7 @@ def test_another_way_to_make_a_deletable_property():
 
 # ====================================================================
 
-class MoreOrganisedClosingSale(ClosingSale):
+class MessyClosingSale(ClosingSale):
     def __init__(self):
         self.last_deletion = None
         super().__init__()
@@ -149,32 +160,41 @@ class MoreOrganisedClosingSale(ClosingSale):
         self.last_deletion = attr_name
 
 def test_delete_can_be_overridden():
-    sale = MoreOrganisedClosingSale()
+    sale = MessyClosingSale()
+
     sales_library = []
-    # List attributes found in __init__ but exclude last_deletion
+    
+    # Extract and lump jellies, cameras, and toilet brushes together
+    lumped_items = {
+        sale.jellies.__name__ + ":" + " " + str(sale.jellies()),
+        sale.cameras.__name__ + ":" + " " + str(sale.cameras()),
+        sale.toilet_brushes.__name__ + ":" + " " + str(sale.toilet_brushes())
+    }
+    
+    # List attributes found in __init__ (hamsters and zebras) but exclude last_deletion
     animal_library = [attr for attr in sale.__dict__ if attr not in ['last_deletion']]
+    
+    # Retrieve number of hamsters and zebras
+    no_of_hamsters = sale.hamsters
+    no_of_zebras = sale.zebras
+    
+    sales_library += list(lumped_items)[0],
+    sales_library += list(lumped_items)[1],
+    sales_library += list(lumped_items)[2],
+    sales_library += animal_library[0] + ":" + " " +  (str(no_of_hamsters)),
+    sales_library += animal_library[1] + ":" + " " +  (str(no_of_zebras)),
 
+    print(f"\nCurrent attributes: {sale.hamsters}")
+    print(sale.cameras.__name__)
     
 
-    no_of_jellies = sale.jellies()
-    no_of_cameras = sale.cameras()
-    no_of_toilet_brushes = sale.toilet_brushes()
-    #no_of_hamsters = sale.hamsters
-    #no_of_zebras = sale.zebras
+    # delete jellies from sale_items
 
+    del sale.hamsters
     
-    sales_library += sale.jellies.__name__ + ":" + " " +  (str(no_of_jellies)),
-    sales_library += sale.cameras.__name__ + ":" + " " +  (str(no_of_cameras)),
-    sales_library += sale.toilet_brushes.__name__ + ":" + " " +  (str(no_of_toilet_brushes)),
-    #sales_library += animal_library
+    print(f"\nNew attributes: {sale.hamsters}")
 
-
-    print(f"\nCurrent attributes: {sales_library}")
-    #print(f"{sales_library[0]} {no_of_hamsters}, {sales_library[1]} {no_of_zebras}")
-    del sale.jellies
-    print(f"\nNew attributes: {sales_library}")
-    
     print(f"\nLast deletion: {sale.last_deletion}")
     
 # Remove hash below to activate function
-test_delete_can_be_overridden()
+#test_delete_can_be_overridden()
