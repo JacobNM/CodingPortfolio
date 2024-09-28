@@ -41,8 +41,12 @@ class ClosingSale:
     
 def test_del_can_remove_attributes():
     crazy_discounts = ClosingSale()
-    # List camera, toilet brush, and jelly attributes
+    # List attributes found in __init__
+    print(f"Attributes in __init__: ")
+
+    # List hamsters and zebras attributes
     print(f"Current attributes: {crazy_discounts.__dict__}")
+
     
     #print(f"Current attributes: {ClosingSale.__dict__.items()}")
 
@@ -132,6 +136,41 @@ def test_another_way_to_make_a_deletable_property():
     print(f"Default name: {citizen.name}")
     
 # Remove hash below to activate function
-test_another_way_to_make_a_deletable_property()
+#test_another_way_to_make_a_deletable_property()
 
 # ====================================================================
+
+class MoreOrganisedClosingSale(ClosingSale):
+    def __init__(self):
+        self.last_deletion = None
+        super().__init__()
+    
+    def __delattr__(self, attr_name):
+        self.last_deletion = attr_name
+
+def test_delete_can_be_overridden():
+    sale = MoreOrganisedClosingSale()
+    sales_library = []
+    
+    no_of_jellies = sale.jellies()
+    no_of_cameras = sale.cameras()
+    no_of_toilet_brushes = sale.toilet_brushes()
+    no_of_hamsters = sale.hamsters
+    print(f"There are {no_of_hamsters} {hamsters}" )
+    no_of_zebras = sale.zebras
+    
+    sales_library += sale.jellies.__name__ + ":" + " " +  (str(no_of_jellies)),
+    sales_library += sale.cameras.__name__ + ":" + " " +  (str(no_of_cameras)),
+    sales_library += sale.toilet_brushes.__name__ + ":" + " " +  (str(no_of_toilet_brushes)),
+
+
+
+    print(f"\nCurrent attributes: {sales_library}")
+    #print(f"{sales_library[0]} {no_of_hamsters}, {sales_library[1]} {no_of_zebras}")
+    del sale.jellies
+    print(f"\nNew attributes: {sales_library}")
+    
+    print(f"\nLast deletion: {sale.last_deletion}")
+    
+# Remove hash below to activate function
+test_delete_can_be_overridden()
