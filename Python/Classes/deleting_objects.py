@@ -50,12 +50,12 @@ class ClosingSale:
     
 def test_del_can_remove_attributes():
     crazy_discounts = ClosingSale()
-    # List attributes found in __init__
 
     # List hamsters and zebras attributes
     print(f"Current attributes: {crazy_discounts.__dict__}")
-    
-    #del ClosingSale.hamsters
+ 
+    # Remove hamsters and toilet_brushes
+    #del ClosingSale.toilet_brushes
     del crazy_discounts.hamsters
     
     print(f"New attributes: {crazy_discounts.__dict__}")
@@ -73,7 +73,7 @@ def test_del_can_remove_attributes():
         print(f"hamsters has been removed: {err_msg2}")
         
 # Remove hash below to activate function
-test_del_can_remove_attributes()
+#test_del_can_remove_attributes()
 
 # ====================================================================
 
@@ -101,8 +101,7 @@ def test_del_works_with_properties():
     #print(f"\nDefault alias: {cowboy.name}")
     cowboy.name = 'Senor Ninguno'
     print(f"\nNew alias added: {cowboy.name}")
-
-    
+ 
     del cowboy.name
     print("\nAlias removed")
     print(f"Default alias: {cowboy.name}")
@@ -156,12 +155,29 @@ class MoreOrganisedClosingSale(ClosingSale):
 def tests_del_can_be_overriden():
     sale = MoreOrganisedClosingSale()
     print(sale.jellies())
-    del sale.jellies
-    print(sale.last_deletion)
+    
+    # Delete jellies from ClosingSale class
+    del ClosingSale.jellies
+    
+    #print(sale.last_deletion)
+    del ClosingSale.toilet_brushes
+
+    try:
+        still_available = sale.jellies()
+        print(f"Jellies still available: {still_available}")
+    except AttributeError as e:
+        err_msg = e.args[0]
+        print(f"Jellies have been removed: {err_msg}")
+    
+    try:
+        still_available = sale.toilet_brushes()
+        print(f"toilet_brushes still available: {still_available}")
+    except AttributeError as e:
+        err_msg = e.args[0]
+        print(f"toilet_brushes() have been removed: {err_msg}")
     
 # Remove hash below to activate function
 tests_del_can_be_overriden()
-
 
 # ====================================================================
 class MessyClosingSale(ClosingSale):
@@ -178,15 +194,17 @@ def test_delete_can_be_overridden():
     sales_library = []
     
     # Extract and lump jellies, cameras, and toilet brushes together
-    lumped_items = {
-        sale.jellies.__name__ + ":" + " " + str(sale.jellies()),
-        sale.cameras.__name__ + ":" + " " + str(sale.cameras()),
-        sale.toilet_brushes.__name__ + ":" + " " + str(sale.toilet_brushes())
-    }
+    try:
+        lumped_items = {
+            sale.jellies.__name__ + ":" + " " + str(sale.jellies()),
+            sale.cameras.__name__ + ":" + " " + str(sale.cameras()),
+            sale.toilet_brushes.__name__ + ":" + " " + str(sale.toilet_brushes())
+        }
+    except AttributeError as e:
+        print(f"An attribute error occurred: {e}")
     
     # List attributes found in __init__ (hamsters and zebras) but exclude last_deletion
     animal_library = [attr for attr in sale.__dict__ if attr not in ['last_deletion']]
-    
     # Retrieve number of hamsters and zebras
     no_of_hamsters = sale.hamsters
     no_of_zebras = sale.zebras
@@ -196,16 +214,39 @@ def test_delete_can_be_overridden():
     sales_library += list(lumped_items)[2],
     sales_library += animal_library[0] + ":" + " " +  (str(no_of_hamsters)),
     sales_library += animal_library[1] + ":" + " " +  (str(no_of_zebras)),
-
-    print(f"\nCurrent attributes: {sale.hamsters}")
-    print(sale.cameras.__name__)
     
-
-    # delete jellies from sale_items
-
-    del sale.hamsters
+    # Print current animal_library
+    print (f"\nCurrent animal_library: {animal_library}")
     
-    print(f"\nNew attributes: {sale.hamsters}")
+    # Print current sales_library
+    print (f"\nCurrent sales_library: {sales_library}")
+
+    # Delete hamsters from animal_library
+    del animal_library[0]
+    
+    # Delete hamster from sales_library
+    del sales_library[3]
+    
+    # Delete toilet_brushes from ClosingSale class
+    del ClosingSale.toilet_brushes
+    
+    # Print new animal_library
+    print(f"\nNew animal_library: {animal_library}")    
+    
+    # Print new sales_library
+    print(f"\nNew sales_library: {sales_library}")
+
+    try:
+        print(sale.hamsters)
+    except AttributeError as e:
+        err_msg = e.args[0]
+        print(f"hamsters has been removed: {err_msg}")
+    
+    try:
+        print (MessyClosingSale.toilet_brushes(ClosingSale))
+    except AttributeError as e:
+        err_msg1 = e.args[0]
+        print(f"toilet_brushes() has been removed: {err_msg1}")
 
     print(f"\nLast deletion: {sale.last_deletion}")
     
