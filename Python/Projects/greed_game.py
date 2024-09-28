@@ -122,7 +122,7 @@ def score(dice):
 
     return score
 
-def play_greed_game():
+def play_greed_game_in_turns():
     # Welcome message and game instructions
     print("\nWelcome to Greed!",
         "\nThe game is simple. Each player will roll 5 dice and try to accumulate points.",
@@ -153,6 +153,17 @@ def play_greed_game():
         
     # Play the game
     game = Game(players)
+    while not game.winner:
+        for player in players:
+            print(f"\n{player.name}'s turn:")
+            input("Press Enter to roll the dice...")
+            player.play()
+            print(f"{player.name} rolled {player.score} points this turn.")
+            if player.score >= 3000:
+                game.winner = player
+                break
+            input("Press Enter to continue to the next player...")
+    game = Game(players)
     winner = game.play_game()
     
     # players = [Player("Player 1"), Player("Player 2")]
@@ -161,4 +172,4 @@ def play_greed_game():
     print(f"The winner is {str(winner)} with a score of {str(winner.score)}")
     
 # Remove the comment below to play the game
-play_greed_game()
+play_greed_game_in_turns()
