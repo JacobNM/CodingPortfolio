@@ -39,38 +39,33 @@ class ClosingSale:
     def jellies(self):
         return 5
     
-    def animal_library(self):
+    #def animal_library(self):
         return f"{self.hamsters} hamsters, {self.zebras} zebras"
     
-    def hamsters(self):
+    #def hamsters(self):
         return self.animal_library()[0:10]
     
-    def zebras(self):
+    #def zebras(self):
         return self.animal_library()[12:20]
-
-    
     
 def test_del_can_remove_attributes():
     crazy_discounts = ClosingSale()
     # List attributes found in __init__
-    print(f"Attributes in __init__: ")
 
     # List hamsters and zebras attributes
     print(f"Current attributes: {crazy_discounts.__dict__}")
-
     
-    #print(f"Current attributes: {ClosingSale.__dict__.items()}")
-
-    del ClosingSale.toilet_brushes
+    #del ClosingSale.hamsters
     del crazy_discounts.hamsters
+    
     print(f"New attributes: {crazy_discounts.__dict__}")
-
+    
     try:
         still_available = crazy_discounts.toilet_brushes()
     except AttributeError as e:
         err_msg1 = e.args[0]
         print(f"toilet_brushes() has been removed: {err_msg1}")
-
+   
     try:
         still_available = crazy_discounts.hamsters
     except AttributeError as e:
@@ -78,7 +73,7 @@ def test_del_can_remove_attributes():
         print(f"hamsters has been removed: {err_msg2}")
         
 # Remove hash below to activate function
-#test_del_can_remove_attributes()
+test_del_can_remove_attributes()
 
 # ====================================================================
 
@@ -150,7 +145,25 @@ def test_another_way_to_make_a_deletable_property():
 #test_another_way_to_make_a_deletable_property()
 
 # ====================================================================
+class MoreOrganisedClosingSale(ClosingSale):
+    def __init__(self):
+        self.last_deletion = None
+        super().__init__()
 
+    def __delattr__(self, attr_name):
+        self.last_deletion = attr_name
+
+def tests_del_can_be_overriden():
+    sale = MoreOrganisedClosingSale()
+    print(sale.jellies())
+    del sale.jellies
+    print(sale.last_deletion)
+    
+# Remove hash below to activate function
+tests_del_can_be_overriden()
+
+
+# ====================================================================
 class MessyClosingSale(ClosingSale):
     def __init__(self):
         self.last_deletion = None
