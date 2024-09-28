@@ -1,3 +1,4 @@
+import os
 import random
 
 # Greed is a dice game where you roll up to five dice to accumulate
@@ -74,6 +75,16 @@ class Game:
                 break
         return self.winner
     
+    def num_players(self):
+        return len(self.players)
+    
+    def num_rounds(self):
+        rounds = 0
+        while not self.winner:
+            self.play_round()
+            rounds += 1
+        return rounds    
+
     def play_game(self):
         while not self.winner:
             self.play_round()
@@ -110,3 +121,44 @@ def score(dice):
     score += counts[5] * 50
 
     return score
+
+def play_greed_game():
+    # Welcome message and game instructions
+    print("\nWelcome to Greed!",
+        "\nThe game is simple. Each player will roll 5 dice and try to accumulate points.",
+        "\n\nScoring is as follows:",
+        "\n\t- A set of three ones is 1000 points",
+        "\n\t- A set of three fives is 500 points",
+        "\n\t- A set of three numbers (other than ones) is worth 100 times the number. (e.g. three fives is 500 points).",
+        "\n\t- A one (that is not part of a set of three) is worth 100 points.",
+        "\n\t- A five (that is not part of a set of three) is worth 50 points.",
+        "\n\t- Everything else is worth 0 points.",
+        "\n\nThe first player to reach 3000 points wins the game.",
+        "\n\nLet's play!\n"
+          )
+    input("\nPress Enter to start the game...")
+    
+    # Clear screen and start the game
+    os.system('cls' if os.name == 'nt' else 'clear')
+    
+    # Determine the number of players
+    num_players = int(input("\nHow many players are playing? "))
+    
+    # Name and create the players
+    input("\nGreat! Let's give a name to each player. Press Enter to continue...")
+    player_names = []
+    for player in range(num_players):
+        player_names.append(input(f"\nPlayer {player + 1}, what is your name? "))
+    players = [Player(name) for name in player_names]
+        
+    # Play the game
+    game = Game(players)
+    winner = game.play_game()
+    
+    # players = [Player("Player 1"), Player("Player 2")]
+    # game = Game(players)
+    # winner = game.play_game()
+    print(f"The winner is {str(winner)} with a score of {str(winner.score)}")
+    
+# Remove the comment below to play the game
+play_greed_game()
