@@ -141,10 +141,12 @@ def test_matching_any_character():
             + "sa1.xls"
     
     # Find all occurrences of any character in the string
-    regex_match = re.findall(".", string)
-    
+    regex_match_every_letter = re.findall(".", string)
     # Print the occurrences of any character in the string in a list
-    print("Occurrences of any character in the string: ", regex_match)
+    print("Occurrences of any character in the string: ", regex_match_every_letter)
+    
+    # Find particular occurrences by combining '.' with text you want, such as 'a..xl'
+    print("Occurrences of 'a..xlx' in the string: ", re.findall('a..xl', string))
     
 # Remove hash below to activate function
 test_matching_any_character()
