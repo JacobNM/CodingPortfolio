@@ -151,18 +151,22 @@ class MoreOrganisedClosingSale(ClosingSale):
 def test_delete_can_be_overridden():
     sale = MoreOrganisedClosingSale()
     sales_library = []
+    # List attributes found in __init__ but exclude last_deletion
+    animal_library = [attr for attr in sale.__dict__ if attr not in ['last_deletion']]
+
     
+
     no_of_jellies = sale.jellies()
     no_of_cameras = sale.cameras()
     no_of_toilet_brushes = sale.toilet_brushes()
-    no_of_hamsters = sale.hamsters
-    print(f"There are {no_of_hamsters} {hamsters}" )
-    no_of_zebras = sale.zebras
+    #no_of_hamsters = sale.hamsters
+    #no_of_zebras = sale.zebras
+
     
     sales_library += sale.jellies.__name__ + ":" + " " +  (str(no_of_jellies)),
     sales_library += sale.cameras.__name__ + ":" + " " +  (str(no_of_cameras)),
     sales_library += sale.toilet_brushes.__name__ + ":" + " " +  (str(no_of_toilet_brushes)),
-
+    #sales_library += animal_library
 
 
     print(f"\nCurrent attributes: {sales_library}")
