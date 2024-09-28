@@ -40,6 +40,56 @@ class DiceSet:
         self._values = [random.randint(1, 6) for _ in range(n)]
         pass
 
+class Player:
+    def __init__(self, name):
+        self.name = name
+        self.score = 0
+    
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.name
+    
+    def play(self):
+        dice = DiceSet()
+        dice.roll(5)
+        self.score += score(dice.values)
+        return self.score
+    
+    def reset(self):
+        self.score = 0
+        
+class Game:
+    def __init__(self, players):
+        self.players = players
+        self.current_player = 0
+        self.winner = None
+    
+    def play_round(self):
+        for player in self.players:
+            player.play()
+            if player.score >= 3000:
+                self.winner = player
+                break
+        return self.winner
+    
+    def play_game(self):
+        while not self.winner:
+            self.play_round()
+        return self.winner
+    
+    def reset(self):
+        for player in self.players:
+            player.reset()
+        self.winner = None
+    
+    def __str__(self):
+        return f"Game with {len(self.players)} players"
+    
+    def __repr__(self):
+        return f"Game with {len(self.players)} players"
+
 # Function to calculate the score of dice rolls
 def score(dice):
     score = 0
@@ -60,123 +110,3 @@ def score(dice):
     score += counts[5] * 50
 
     return score
-
-def test_can_create_a_dice_set():
-        dice = DiceSet()
-        print(dice)
-
-# Remove hash below to activate function
-#test_can_create_a_dice_set()
-
-def test_rolling_the_dice_returns_a_set_of_integers_between_1_and_6():
-    dice = DiceSet()
-
-    dice.roll(8)
-    print(isinstance(dice.values, list))
-    print(len(dice.values))
-    for value in dice.values:
-        print(f"{(value >= 1 and value <= 6)}. Value is between 1 and 6: {value}")
-
-# Remove hash below to activate function
-#test_rolling_the_dice_returns_a_set_of_integers_between_1_and_6()
-
-def test_dice_values_do_not_change_unless_explicitly_rolled():
-    dice = DiceSet()
-    dice.roll(5)
-    first_time = dice.values
-    second_time = dice.values
-    print(first_time)
-    print(second_time)
-
-# Remove hash below to activate function
-#test_dice_values_do_not_change_unless_explicitly_rolled()
-
-def test_dice_values_should_change_between_rolls():
-    dice = DiceSet()
-
-    dice.roll(5)
-    first_time = dice.values
-
-    dice.roll(5)
-    second_time = dice.values
-
-    print(first_time)
-    print(second_time)
-
-# Remove hash below to activate function
-#test_dice_values_should_change_between_rolls()
-
-def test_you_can_roll_different_numbers_of_dice():
-    dice = DiceSet()
-    dice.roll(6)
-    print(dice.values)
-    print(f"Your score for this roll is {score(dice.values)}")
-    dice.roll(1)
-    print(dice.values)
-    print(f"Your score for this roll is {score(dice.values)}")
-
-# Remove hash below to activate function
-test_you_can_roll_different_numbers_of_dice()
-
-
-class GreedGameScoringProject():
-    def test_score_of_an_empty_list_is_zero():
-        print(score([]))
-    
-    # Remove hash below to activate function
-    #test_score_of_an_empty_list_is_zero() 
-
-    def test_score_of_a_single_roll_of_5_is_50():
-        print(score([5]))
-
-    # Remove hash below to activate function
-    #test_score_of_a_single_roll_of_5_is_50()
-    
-    def test_score_of_a_single_roll_of_1_is_100():
-        print(score([1]))
-
-    # Remove hash below to activate function
-    #test_score_of_a_single_roll_of_1_is_100()    
-    
-    def test_score_of_multiple_1s_and_5s_is_the_sum_of_individual_scores():
-        print(score([1,5,5,1]))
-
-    # Remove hash below to activate function
-    #test_score_of_multiple_1s_and_5s_is_the_sum_of_individual_scores()
-    
-    def test_score_of_single_2s_3s_4s_and_6s_are_zero():
-        print(score([2,3,4,6]))
-        
-    # Remove hash below to activate function
-    #test_score_of_single_2s_3s_4s_and_6s_are_zero()
-
-    def test_score_of_a_triple_1_is_1000():
-        print(score([1,1,1]))
-
-    # Remove hash below to activate function
-    #test_score_of_a_triple_1_is_1000()
-    
-    def test_score_of_other_triples_is_100x():
-        print(score([2,2,2]))
-        print(score([3,3,3]))
-        print(score([4,4,4]))
-        print(score([5,5,5]))
-        print(score([6,6,6]))
-
-    # Remove hash below to activate function
-    #test_score_of_other_triples_is_100x()
-    
-    def test_score_of_mixed_is_sum():
-        print(score([2,5,2,2,3]))
-        print(score([5,5,5,5]))
-        print(score([1,1,1,5,1]))
-
-    # Remove hash below to activate function
-    #test_score_of_mixed_is_sum()
-    
-    def test_ones_not_left_out():
-        print(score([1,2,2,2]))
-        print(score([1,5,2,2,2]))
-
-    # Remove hash below to activate function
-    #test_ones_not_left_out()
