@@ -55,7 +55,7 @@ def test_del_can_remove_attributes():
     print(f"Current attributes: {crazy_discounts.__dict__}")
  
     # Remove hamsters and toilet_brushes
-    #del ClosingSale.toilet_brushes
+    del ClosingSale.toilet_brushes
     del crazy_discounts.hamsters
     
     print(f"New attributes: {crazy_discounts.__dict__}")
@@ -177,17 +177,19 @@ def tests_del_can_be_overriden():
         print(f"toilet_brushes() have been removed: {err_msg}")
     
 # Remove hash below to activate function
-tests_del_can_be_overriden()
+#tests_del_can_be_overriden()
 
 # ====================================================================
 class MessyClosingSale(ClosingSale):
     def __init__(self):
         self.last_deletion = None
         super().__init__()
+
     
     def __delattr__(self, attr_name):
         self.last_deletion = attr_name
-
+        self.sales_library.append(attr_name)
+        
 def test_delete_can_be_overridden():
     sale = MessyClosingSale()
 
@@ -215,40 +217,47 @@ def test_delete_can_be_overridden():
     sales_library += animal_library[0] + ":" + " " +  (str(no_of_hamsters)),
     sales_library += animal_library[1] + ":" + " " +  (str(no_of_zebras)),
     
-    # Print current animal_library
-    print (f"\nCurrent animal_library: {animal_library}")
-    
+    # Sort sales_library so that values remain in order
+    sales_library.sort()
     # Print current sales_library
     print (f"\nCurrent sales_library: {sales_library}")
-
+    # Delete jellies and toilet brushes from sales_library
+    del sales_library[2]; del sales_library[2]
+    
+    # Try to Print new sales_library after deletion
+    try:
+        print(f"New sales_library: {sales_library}")
+    except UnboundLocalError as ex:
+        print(f"{UnboundLocalError.__name__} has been raised. The sales_library does not exist. {ex}")
+    
+    # Print current animal_library
+    print (f"\nCurrent animal_library: {animal_library}")
     # Delete hamsters from animal_library
     del animal_library[0]
+    # Print new animal_library (Hamsters removed)
+    print(f"New animal_library: {animal_library}")    
     
-    # Delete hamster from sales_library
-    del sales_library[3]
+    # Delete jellies from sale
+    del ClosingSale.jellies
     
     # Delete toilet_brushes from ClosingSale class
     del ClosingSale.toilet_brushes
-    
-    # Print new animal_library
-    print(f"\nNew animal_library: {animal_library}")    
-    
-    # Print new sales_library
-    print(f"\nNew sales_library: {sales_library}")
 
     try:
-        print(sale.hamsters)
+        still_available = sale.jellies()
+        print(f"\nJellies still available: {still_available}")
     except AttributeError as e:
         err_msg = e.args[0]
-        print(f"hamsters has been removed: {err_msg}")
+        print(f"\nJellies have been removed: {err_msg}")
     
     try:
-        print (MessyClosingSale.toilet_brushes(ClosingSale))
+        still_available = sale.toilet_brushes()
+        print(f"toilet_brushes still available: {still_available}")
     except AttributeError as e:
         err_msg1 = e.args[0]
-        print(f"toilet_brushes() has been removed: {err_msg1}")
+        print(f"toilet_brushes() have been removed: {err_msg1}")
 
     print(f"\nLast deletion: {sale.last_deletion}")
     
 # Remove hash below to activate function
-#test_delete_can_be_overridden()
+test_delete_can_be_overridden()
