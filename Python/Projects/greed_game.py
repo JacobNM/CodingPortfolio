@@ -6,26 +6,12 @@ import random
 # score of a single roll of the dice.
 #
 # A greed roll is scored as follows:
-#
 # * A set of three ones is 1000 points
-#
 # * A set of three numbers (other than ones) is worth 100 times the
 #   number. (e.g. three fives is 500 points).
-#
 # * A one (that is not part of a set of three) is worth 100 points.
-#
 # * A five (that is not part of a set of three) is worth 50 points.
-#
 # * Everything else is worth 0 points.
-#
-# Examples:
-#
-# score([1,1,1,5,1]) => 1150 points
-# score([2,3,4,6,2]) => 0 points
-# score([3,4,5,3,3]) => 350 points
-# score([1,5,1,2,4]) => 250 points
-#
-# More scoring examples are given in the tests below:
 
 # Create a class to represent a set of dice
 class DiceSet:
@@ -45,6 +31,7 @@ class Player:
     def __init__(self, name):
         self.name = name
         self.score = 0
+        self.total_score = 0
     
     def __str__(self):
         return self.name
@@ -56,24 +43,18 @@ class Player:
         dice = DiceSet()
         dice.roll(5)
         self.score += score(dice.values)
+        self.total_score += self.score
         return self.score
     
     def reset(self):
         self.score = 0
+        self.total_score = 0
         
 class Game:
     def __init__(self, players):
         self.players = players
         self.current_player = 0
         self.winner = None
-    
-    def play_round(self):
-        for player in self.players:
-            player.play()
-            if player.score >= 3000:
-                self.winner = player
-                break
-        return self.winner
     
     def num_players(self):
         return len(self.players)
@@ -87,8 +68,15 @@ class Game:
 
     def play_game(self):
         while not self.winner:
-            self.play_round()
+            for player in self.players:
+                player.play()
+                if player.total_score >= 3000:
+                    self.winner = player
+                    break
         return self.winner
+    
+    def track_total_scores(self):
+            return {player.name: player.total_score for player in self.players}
     
     def reset(self):
         for player in self.players:
@@ -100,15 +88,6 @@ class Game:
     
     def __repr__(self):
         return f"Game with {len(self.players)} players"
-
-    def track_total_scores(self):
-        total_scores = {}
-        for player in self.players:
-            if player.name in total_scores:
-                total_scores[player.name] += player.score
-            else:
-                total_scores[player.name] = player.score
-        return total_scores
 
 # Function to calculate the score of dice rolls
 def score(dice):
@@ -202,19 +181,15 @@ def play_greed_game_in_turns():
             input("Press Enter to roll the dice...")
             player.play()
             print(f"{player.name} rolled {player.score} points this turn.")
-            if player.score >= 3000:
+            if player.total_score >= 3000:
                 game.winner = player
                 break
             print(f"Current scores: {game.track_total_scores()}")
             input("Press Enter to continue to the next player...")
             os.system('cls' if os.name == 'nt' else 'clear')
-    game = Game(players)
     winner = game.play_game()
     
-    # players = [Player("Player 1"), Player("Player 2")]
-    # game = Game(players)
-    # winner = game.play_game()
-    print(f"The winner is {str(winner)} with a score of {str(winner.score)}")
+    print(f"The winner is {game.winner.name} with a score of {game.track_total_scores()[game.winner.name]}")
     
 # Remove the comment below to play the game
 play_greed_game_in_turns()
