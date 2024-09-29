@@ -101,6 +101,15 @@ class Game:
     def __repr__(self):
         return f"Game with {len(self.players)} players"
 
+    def track_total_scores(self):
+        total_scores = {}
+        for player in self.players:
+            if player.name in total_scores:
+                total_scores[player.name] += player.score
+            else:
+                total_scores[player.name] = player.score
+        return total_scores
+
 # Function to calculate the score of dice rolls
 def score(dice):
     score = 0
@@ -144,10 +153,9 @@ def play_quick_greed_game():
     num_players = int(input("\nHow many players are playing? "))
     
     # Name and create the players
-    input("\nGreat! Let's give a name to each player. Press Enter to continue...")
     player_names = []
     for player in range(num_players):
-        player_names.append(input(f"\nPlayer {player + 1}, what is your name? "))
+        player_names.append(input(f"\nGreat! Player {player + 1}, what is your name? "))
     players = [Player(name) for name in player_names]
     
     # Play the game
@@ -181,10 +189,9 @@ def play_greed_game_in_turns():
     num_players = int(input("\nHow many players are playing? "))
     
     # Name and create the players
-    input("\nGreat! Let's give a name to each player. Press Enter to continue...")
     player_names = []
     for player in range(num_players):
-        player_names.append(input(f"\nPlayer {player + 1}, what is your name? "))
+        player_names.append(input(f"\nGreat! Player {player + 1}, what is your name? "))
     players = [Player(name) for name in player_names]
         
     # Play the game
@@ -195,10 +202,10 @@ def play_greed_game_in_turns():
             input("Press Enter to roll the dice...")
             player.play()
             print(f"{player.name} rolled {player.score} points this turn.")
-            print(f"{player.name} has a total of {player.score} points.")
             if player.score >= 3000:
                 game.winner = player
                 break
+            print(f"Current scores: {game.track_total_scores()}")
             input("Press Enter to continue to the next player...")
             os.system('cls' if os.name == 'nt' else 'clear')
     game = Game(players)
