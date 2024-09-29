@@ -140,7 +140,7 @@ def play_quick_greed_game():
     # Play the game
     game = Game(players)
     winner = game.play_game()
-    print(f"The winner is {str(winner)} with a score of {str(winner.score)}")
+    print(f"The winner is {game.winner.name} with a score of {game.track_total_scores()[game.winner.name]}")
     
 # Remove the comment below to play the quick version of the game
 # play_quick_greed_game()
@@ -192,4 +192,4 @@ def play_greed_game_in_turns():
     print(f"The winner is {game.winner.name} with a score of {game.track_total_scores()[game.winner.name]}")
     
 # Remove the comment below to play the game
-play_greed_game_in_turns()
+# play_greed_game_in_turns()
