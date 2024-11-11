@@ -74,6 +74,11 @@ fi
 echo "Checking new versions of RabbitMQ and Erlang..."
 rpm -qa | grep -E "rabbit|erlang"
 
+# Start RabbitMQ
+echo "Starting RabbitMQ..."
+sudo systemctl start rabbitmq-server
+
+# Process to configure RabbitMQ:
 # 9. Configure RabbitMQ users
 echo "Configuring RabbitMQ users..."
 sudo rabbitmqctl add_user vantage
