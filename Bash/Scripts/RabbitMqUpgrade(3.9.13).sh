@@ -146,4 +146,21 @@ if [ $? -ne 0 ]; then
     echo "Failed to verify RabbitMQ permissions. Exiting."
     exit 1
 fi
+
+# 19. Verify Virtual Hosts
+echo "Verifying RabbitMQ virtual hosts..."
+sudo rabbitmqctl list_vhosts
+if [ $? -ne 0 ]; then
+    echo "Failed to verify RabbitMQ virtual hosts. Exiting."
+    exit 1
+fi
+
+# 20. Verify Enabled Plugins
+echo "Verifying enabled RabbitMQ plugins..."
+sudo rabbitmq-plugins list
+if [ $? -ne 0 ]; then
+    echo "Failed to verify enabled RabbitMQ plugins. Exiting."
+    exit 1
+fi
+
 echo "RabbitMQ upgrade completed successfully."
