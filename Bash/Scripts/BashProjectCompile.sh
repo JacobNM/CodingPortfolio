@@ -6,8 +6,8 @@
 
 # Grabs operating system release file for utilization of variables contained within
 source /etc/os-release
-source /home/jacob/COMP2101/bash/reportfunctions.sh
-
+# source /home/jacob/COMP2101/bash/reportfunctions.sh
+source /home/jacob/Repositories/CodingPortfolio/Bash/Functions/reportfunctions.sh
 
 ## Variable lists
 
