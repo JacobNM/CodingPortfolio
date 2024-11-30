@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables
-# Edit the following variables with the appropriate values to configure the RabbitMQ upgrade
+# Edit the following variables with the appropriate values to configure the RabbitMQ upgrade script
 
 rabbitmq_definitions_export_file="/tmp/rabbitmq_definitions_export.json"
 current_erlang_version=$(rpm -qa | grep erlang | head -n 1)
@@ -11,28 +11,16 @@ new_erlang_version_install_file="erlang-25.3.2.15-1.el7.x86_64.rpm"
 desired_rabbitmq_version="v3.10.25" # Edit with the desired RabbitMQ version (e.g. "v3.10.25")
 new_rabbitmq_version_install_file="rabbitmq-server-3.10.25-1.el8.noarch.rpm"
 
-# Check status of RabbitMQ and Erlang on the machine
+# 1. Check status of RabbitMQ and Erlang on the machine
 echo "Checking current RabbitMQ and Erlang versions..."
 rpm -qa | grep -E "rabbit|erlang"
 sudo rabbitmqctl status
 
-# # Process to upgrade RabbitMQ:
-# # 1. Stop RabbitMQ
-# echo "Stopping RabbitMQ..."
-# sudo systemctl stop rabbitmq-server
-# if [ $? -ne 0 ]; then
-#     echo "Failed to stop RabbitMQ. Exiting."
-#     exit 1
-# fi
-
-# 2. Backup the existing RabbitMQ data
-echo "Backing up RabbitMQ data..."
-sudo cp -r /var/lib/rabbitmq /var/lib/rabbitmq_backup
-# Export RabbitMQ definitions
+# 2. Export RabbitMQ definitions
 echo "Exporting RabbitMQ definitions..."
 sudo curl -u vantage:vantage -X GET http://127.0.0.1:15672/api/definitions > $rabbitmq_definitions_export_file
 if [ $? -ne 0 ]; then
-    echo "Failed to backup RabbitMQ data. Exiting."
+    echo "Failed to export RabbitMQ definitions. Exiting."
     exit 1
 fi
 
@@ -92,7 +80,7 @@ rpm -qa | grep -E "rabbit|erlang"
 echo "Starting RabbitMQ..."
 sudo systemctl start rabbitmq-server
 
-# Import RabbitMQ definitions
+# 11. Import RabbitMQ definitions
 echo "Importing RabbitMQ definitions..."
 sudo rabbitmqctl import_definitions $rabbitmq_definitions_export_file
 if [ $? -ne 0 ]; then
@@ -100,35 +88,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# # Process to configure RabbitMQ:
-# # 11. Configure RabbitMQ users
-# echo "Configuring RabbitMQ users..."
-# sudo rabbitmqctl add_user vantage "vantage"
-# sudo rabbitmqctl set_user_tags vantage administrator
-# if [ $? -ne 0 ]; then
-#     echo "Failed to configure RabbitMQ users. Exiting."
-#     exit 1
-# fi
-
-# # 12. Configure RabbitMQ Virtual Hosts
-# echo "Configuring RabbitMQ virtual hosts..."
-# sudo rabbitmqctl add_vhost /satellite
-# sudo rabbitmqctl add_vhost /inbound
-# if [ $? -ne 0 ]; then
-#     echo "Failed to configure RabbitMQ virtual hosts. Exiting."
-#     exit 1
-# fi
-
-# # 13. Configure RabbitMQ Permissions
-# echo "Configuring RabbitMQ permissions..."
-# sudo rabbitmqctl set_permissions -p /satellite vantage ".*" ".*" ".*"
-# sudo rabbitmqctl set_permissions -p /inbound vantage ".*" ".*" ".*"
-# if [ $? -ne 0 ]; then
-#     echo "Failed to configure RabbitMQ permissions. Exiting."
-#     exit 1
-# fi
-
-# 14. Restart RabbitMQ
+# 12. Restart RabbitMQ
 echo "Restarting RabbitMQ..."
 sudo systemctl restart rabbitmq-server
 if [ $? -ne 0 ]; then
@@ -136,16 +96,17 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 15. Check the status of RabbitMQ
+# 13. Check the status of RabbitMQ
 echo "Checking RabbitMQ status..."
 sudo systemctl status rabbitmq-server
 sudo rabbitmqctl status
+read -p "Press Enter to continue..."
 if [ $? -ne 0 ]; then
     echo "Failed to check RabbitMQ status. Exiting."
     exit 1
 fi
 
-# 16. Check that RabbitMQ is listing queues
+# 14. Check that RabbitMQ is listing queues
 echo "Checking RabbitMQ queues..."
 sudo rabbitmqctl list_queues
 if [ $? -ne 0 ]; then
@@ -153,7 +114,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 17. Verify RabbitMQ users
+# 15. Verify RabbitMQ users
 echo "Verifying RabbitMQ users..."
 sudo rabbitmqctl list_users
 if [ $? -ne 0 ]; then
@@ -161,7 +122,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 18. Verify Permissions
+# 16. Verify Permissions
 echo "Verifying RabbitMQ permissions..."
 sudo rabbitmqctl list_user_permissions vantage
 if [ $? -ne 0 ]; then
@@ -169,7 +130,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 19. Verify Virtual Hosts
+# 17. Verify Virtual Hosts
 echo "Verifying RabbitMQ virtual hosts..."
 sudo rabbitmqctl list_vhosts
 if [ $? -ne 0 ]; then
@@ -177,7 +138,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 20. Verify Enabled Plugins
+# 18. Verify Enabled Plugins
 echo "Verifying enabled RabbitMQ plugins..."
 sudo rabbitmq-plugins list
 if [ $? -ne 0 ]; then
@@ -185,7 +146,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 21. Report success and cleanup installation files
+# 19. Report success and cleanup installation files
 echo "RabbitMQ upgrade completed successfully. Cleaning up installation files..."
 rm $new_erlang_version_install_file $new_rabbitmq_version_install_file $rabbitmq_definitions_export_file
 if [ $? -ne 0 ]; then
