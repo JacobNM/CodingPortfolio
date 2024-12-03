@@ -27,10 +27,6 @@ fi
 # 3. Remove the existing RabbitMQ and Erlang packages
 echo "Removing existing RabbitMQ and Erlang packages..."
 sudo yum remove -y "$current_rabbitmq_version" "$current_erlang_version"
-if [ $? -ne 0 ]; then
-    echo "Failed to remove RabbitMQ and Erlang packages. Exiting."
-    exit 1
-fi
 
 # 4. Download the Erlang Package
 echo "Downloading Erlang package..."
