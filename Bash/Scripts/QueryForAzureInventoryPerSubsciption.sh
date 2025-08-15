@@ -1,13 +1,13 @@
 DATE=$(date +%F)
-ENVIRONMENTNAME="staging"
+ENVIRONMENTNAME="release"
 OUT="$HOME/Downloads/azure_${ENVIRONMENTNAME}_inventory_${DATE}.csv"
-SUBSCRIPTION="ba69753e-54c1-480b-a940-6cee4521a7ad"
+SUBSCRIPTIONID="2d239316-7ee9-4456-aa90-03a9ee0aa3ed"
 
-az account set --subscription "$SUBSCRIPTION"
+az account set --subscription "$SUBSCRIPTIONID"
 az config set extension.use_dynamic_install=yes_without_prompt >/dev/null
 
 az graph query \
-  --subscriptions "$SUBSCRIPTION" \
+  --subscriptions "$SUBSCRIPTIONID" \
   --first 1000 \
   -q 'Resources
       | project id, name, type, resourceGroup, subscriptionId, location, tags
