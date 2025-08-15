@@ -166,36 +166,38 @@ while IFS= read -r RID; do
     esac
   fi
 
-  # Get existing tag keys (safe if null)
-  KEYS_TSV="$(az resource show --ids "$RID" --query 'keys(tags || `{}`)' -o tsv 2>/dev/null || true)"
+  # Get existing tags directly via az (no piping)
+  TAGS_JSON="$(az resource show --ids "$RID" --query 'tags' -o json 2>/dev/null || echo 'null')"
+  [ "$TAGS_JSON" = "null" ] && TAGS_JSON='{}'
 
   HAS_KEY=0
   if [ "$CASE_SENSITIVE" -eq 1 ]; then
-    for k in $KEYS_TSV; do
-      if [ "$k" = "$TAG_KEY" ]; then
-        VAL_JSON="$(az resource show --ids "$RID" --query "tags['$k']" -o json 2>/dev/null || echo 'null')"
-        if [ "$VAL_JSON" != "null" ] && [ "$VAL_JSON" != '""' ]; then 
-          HAS_KEY=1
-        fi
-        break
-      fi
-    done
+    # Case-sensitive: read the specific key directly
+    EXISTING_VALUE="$(az resource show --ids "$RID" --query "tags.$TAG_KEY" -o tsv 2>/dev/null || echo "")"
+    if [ -n "$EXISTING_VALUE" ] && [ "$EXISTING_VALUE" != "null" ]; then
+      HAS_KEY=1
+      echo "[$PROCESSED/$TOTAL] $RID — tag '$TAG_KEY' already exists with value '$EXISTING_VALUE', skipping."
+    fi
   else
+    # Case-insensitive: list keys from az, compare in shell
+    TAG_KEYS="$(az resource show --ids "$RID" --query 'keys(tags)' -o tsv 2>/dev/null || true)"
     tk_lc="$(printf "%s" "$TAG_KEY" | tr 'A-Z' 'a-z')"
-    for k in $KEYS_TSV; do
+
+    while IFS= read -r k; do
+      [ -z "$k" ] && continue
       klc="$(printf "%s" "$k" | tr 'A-Z' 'a-z')"
       if [ "$klc" = "$tk_lc" ]; then
-        VAL_JSON="$(az resource show --ids "$RID" --query "tags['$k']" -o json 2>/dev/null || echo 'null')"
-        if [ "$VAL_JSON" != "null" ] && [ "$VAL_JSON" != '""' ]; then 
+        EXISTING_VALUE="$(az resource show --ids "$RID" --query "tags.$k" -o tsv 2>/dev/null || echo "")"
+        if [ -n "$EXISTING_VALUE" ] && [ "$EXISTING_VALUE" != "null" ]; then
           HAS_KEY=1
+          echo "[$PROCESSED/$TOTAL] $RID — tag '$k' already exists with value '$EXISTING_VALUE', skipping."
         fi
         break
       fi
-    done
+    done <<< "$TAG_KEYS"
   fi
 
   if [ $HAS_KEY -eq 1 ]; then
-    echo "[$PROCESSED/$TOTAL] $RID — tag present, skipping."
     SKIPPED_PRESENT=$((SKIPPED_PRESENT+1))
     continue
   fi
