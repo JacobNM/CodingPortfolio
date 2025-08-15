@@ -1,27 +1,23 @@
 #!/usr/bin/env bash
-# add-missing-tag.sh
-# Check an Azure resource for a tag; if missing/empty, add it.
-# Requires: Azure CLI (`az`) logged in with permissions to read/update the resource.
-
+# update-missing-tag.sh
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
 Usage:
-  # Option A: Provide a full resource ID
-  UpdateAzureResourceWithTag.sh -i <resourceId> -k <tagKey> -v <tagValue> [--dry-run]
+  # With full resource ID
+  update-missing-tag.sh -i <resourceId> -k <tagKey> -v <tagValue> [--dry-run]
 
-  # Option B: Provide name, group, and type
-  UpdateAzureResourceWithTag.sh -g <resourceGroup> -n <name> -t <resourceType> -k <tagKey> -v <tagValue> [--dry-run]
+  # Or with RG/Name/Type
+  update-missing-tag.sh -g <resourceGroup> -n <name> -t <resourceType> -k <tagKey> -v <tagValue> [--dry-run]
 
 Notes:
-  - <resourceType> is the full type, e.g. "Microsoft.Compute/virtualMachines"
-  - The script preserves existing tags and only sets the specified key if it is missing or empty.
-  - Use --dry-run to see what would happen without making changes.
+  - <resourceType> example: Microsoft.App/containerApps (case-insensitive)
+  - Preserves all existing tags; only adds the missing key.
+  - Uses 'az resource tag --is-incremental' to avoid provider validation errors.
 EOF
 }
 
-# Defaults
 RESOURCE_ID=""
 RG=""
 NAME=""
@@ -30,7 +26,6 @@ TAG_KEY=""
 TAG_VALUE=""
 DRY_RUN=0
 
-# Parse args
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -i|--id) RESOURCE_ID="$2"; shift 2 ;;
@@ -45,46 +40,32 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate inputs
 if [[ -z "$TAG_KEY" || -z "$TAG_VALUE" ]]; then
   echo "Error: tag key and value are required." >&2
   usage; exit 1
 fi
 
-if [[ -z "$RESOURCE_ID" ]]; then
-  if [[ -z "$RG" || -z "$NAME" || -z "$TYPE" ]]; then
-    echo "Error: either --id or (--resource-group, --name, --type) must be provided." >&2
-    usage; exit 1
-  fi
+if [[ -z "$RESOURCE_ID" && ( -z "$RG" || -z "$NAME" || -z "$TYPE" ) ]]; then
+  echo "Error: either --id or (--resource-group, --name, --type) must be provided." >&2
+  usage; exit 1
 fi
 
-# Confirm az is available
-if ! command -v az >/dev/null 2>&1; then
-  echo "Error: Azure CLI 'az' is not installed or not in PATH." >&2
-  exit 1
-fi
+command -v az >/dev/null 2>&1 || { echo "Error: Azure CLI 'az' not found."; exit 1; }
 
-# Resolve resource ID if needed
 if [[ -z "$RESOURCE_ID" ]]; then
-  # shellcheck disable=SC2207
-  RESOURCE_ID="$(az resource show \
-    --resource-group "$RG" \
-    --name "$NAME" \
-    --resource-type "$TYPE" \
-    --query id -o tsv)"
-  if [[ -z "$RESOURCE_ID" ]]; then
-    echo "Error: failed to resolve resource ID." >&2
-    exit 1
-  fi
+  RESOURCE_ID="$(az resource show --resource-group "$RG" --name "$NAME" --resource-type "$TYPE" --query id -o tsv)"
+  [[ -n "$RESOURCE_ID" ]] || { echo "Error: failed to resolve resource ID."; exit 1; }
 fi
 
 echo "Target resource: $RESOURCE_ID"
 echo "Ensuring tag: $TAG_KEY=$TAG_VALUE"
 
-# Read current tag value (empty string if not set)
-CURRENT_VALUE="$(az resource show --ids "$RESOURCE_ID" --query "tags['$TAG_KEY']" -o tsv || true)"
+# Read current value safely as JSON (handles null)
+CURRENT_JSON="$(az resource show --ids "$RESOURCE_ID" --query "tags.${TAG_KEY}" -o json || echo 'null')"
+# Strip surrounding quotes if it's a JSON string; null stays "null"
+CURRENT_VALUE="${CURRENT_JSON%\"}"; CURRENT_VALUE="${CURRENT_VALUE#\"}"
 
-if [[ -n "$CURRENT_VALUE" ]]; then
+if [[ "$CURRENT_JSON" != "null" && -n "$CURRENT_VALUE" ]]; then
   echo "Tag '$TAG_KEY' already present with value: '$CURRENT_VALUE' — no change."
   exit 0
 fi
@@ -93,15 +74,16 @@ echo "Tag '$TAG_KEY' is missing or empty — will set it."
 
 if [[ $DRY_RUN -eq 1 ]]; then
   echo "[Dry run] Would run:"
-  echo "az resource update --ids \"$RESOURCE_ID\" --set \"tags.$TAG_KEY=$TAG_VALUE\""
+  echo "az resource tag --ids \"$RESOURCE_ID\" --is-incremental --tags \"$TAG_KEY=$TAG_VALUE\""
   exit 0
 fi
 
-# Update only the single tag key (preserves other tags)
-az resource update --ids "$RESOURCE_ID" --set "tags.$TAG_KEY=$TAG_VALUE" >/dev/null
+# Merge a single tag without replacing others; avoids provider model validation
+az resource tag --ids "$RESOURCE_ID" --is-incremental --tags "$TAG_KEY=$TAG_VALUE" >/dev/null
 
 # Verify
-NEW_VALUE="$(az resource show --ids "$RESOURCE_ID" --query "tags['$TAG_KEY']" -o tsv || true)"
+NEW_JSON="$(az resource show --ids "$RESOURCE_ID" --query "tags.${TAG_KEY}" -o json || echo 'null')"
+NEW_VALUE="${NEW_JSON%\"}"; NEW_VALUE="${NEW_VALUE#\"}"
 if [[ "$NEW_VALUE" == "$TAG_VALUE" ]]; then
   echo "Success: tag '$TAG_KEY' set to '$TAG_VALUE'."
 else
