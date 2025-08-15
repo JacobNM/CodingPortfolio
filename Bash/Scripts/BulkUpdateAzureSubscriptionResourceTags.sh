@@ -37,12 +37,19 @@ Example usages:
 
   ./BulkUpdateAzureSubscriptionResourceTags.sh -s "MyProdSub" -k environment -v prod --max 25
     # This would tag up to 25 resources in the subscription with 'environment=prod' where missing/empty.
-  EOF
+
+EOF
 }
 
-SUB=""; TAG_KEY=""; TAG_VALUE=""
-DRY_RUN=0; INCLUDE_TYPES=""; EXCLUDE_TYPES=""; LIMIT_RGS=""
-CASE_SENSITIVE=0; MAX_COUNT=0
+SUB=""
+TAG_KEY=""
+TAG_VALUE=""
+DRY_RUN=0
+INCLUDE_TYPES=""
+EXCLUDE_TYPES=""
+LIMIT_RGS=""
+CASE_SENSITIVE=0
+MAX_COUNT=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
