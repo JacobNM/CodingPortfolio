@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# update-missing-tag.sh
+# UpdateAzureResourceWithTag.sh
 set -euo pipefail
 
 usage() {
