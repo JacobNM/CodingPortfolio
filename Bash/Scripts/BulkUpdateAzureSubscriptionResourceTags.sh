@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bulk-add-missing-tag.sh
+# BulkUpdateAzureSubscriptionResourceTags.sh
 # Add a tag (key=value) to ALL resources in a subscription where the tag is missing or empty.
 # Uses 'az resource tag --is-incremental' to avoid provider-specific validation (safer for ContainerApps, etc).
 # Requires: Azure CLI logged in with access to the target subscription.
@@ -26,9 +26,19 @@ Notes:
   - Uses incremental tagging so existing tags are preserved.
   - If any resource fails to tag, the script logs and continues.
 
-Example usage:
-  bulk-add-missing-tag.sh -s my-subscription -k Environment -v Production --include-types Microsoft.Compute/virtualMachines,Microsoft.App/containerApps --dry-run
+Example usages:
+  BulkUpdateAzureSubscriptionResourceTags.sh -s my-subscription -k Environment -v Production --include-types Microsoft.Compute/virtualMachines,Microsoft.App/containerApps --dry-run
   # This would show what would be tagged without making changes.
+
+  ./BulkUpdateAzureSubscriptionResourceTags.sh -s "MyProdSub" -k environment -v prod --exclude-types "Microsoft.KeyVault/vaults"
+    # This would tag all resources except Key Vaults, adding 'environment=prod' where missing/empty.
+
+  ./BulkUpdateAzureSubscriptionResourceTags.sh -s "MyProdSub" -k environment -v prod --resource-groups "MyResourceGroup"
+    # This would only tag resources in "MyResourceGroup" with 'environment=prod' where missing/empty.
+
+  ./BulkUpdateAzureSubscriptionResourceTags.sh -s "MyProdSub" -k environment -v prod --max 25
+    # This would tag up to 25 resources in the subscription with 'environment=prod' where missing/empty.
+
 EOF
 }
 
