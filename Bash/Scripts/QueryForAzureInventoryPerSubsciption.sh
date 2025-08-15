@@ -1,15 +1,13 @@
 DATE=$(date +%F)
 OUT="$HOME/Downloads/azure_production_inventory_${DATE}.csv"
-SUBSCRIPTION="<subscription_id>"
+SUBSCRIPTION="ba69753e-54c1-480b-a940-6cee4521a7ad"
 
-# Make sure you're on the right subscription
 az account set --subscription "$SUBSCRIPTION"
-
-# (Optional) let Azure CLI install the Resource Graph extension if needed
 az config set extension.use_dynamic_install=yes_without_prompt >/dev/null
 
 az graph query \
   --subscriptions "$SUBSCRIPTION" \
+  --first 1000 \
   -q 'Resources
       | project id, name, type, resourceGroup, subscriptionId, location, tags
       | order by type asc, name asc' \
@@ -17,12 +15,7 @@ az graph query \
 | jq -r '
   ["id","name","type","resourceGroup","subscriptionId","location","tags_json"],
   (.data[] | [
-    .id,
-    .name,
-    .type,
-    .resourceGroup,
-    .subscriptionId,
-    .location,
+    .id, .name, .type, .resourceGroup, .subscriptionId, .location,
     (.tags // {} | tojson)
   ]) | @csv
 ' > "$OUT"
