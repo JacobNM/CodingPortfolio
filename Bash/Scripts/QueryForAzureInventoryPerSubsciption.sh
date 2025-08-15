@@ -1,7 +1,7 @@
 DATE=$(date +%F)
-ENVIRONMENTNAME="release"
+ENVIRONMENTNAME="<your-environment-name>"  # e.g. "prod", "dev", "test"
 OUT="$HOME/Downloads/azure_${ENVIRONMENTNAME}_inventory_${DATE}.csv"
-SUBSCRIPTIONID="2d239316-7ee9-4456-aa90-03a9ee0aa3ed"
+SUBSCRIPTIONID="<your-subscription-id>"
 
 az account set --subscription "$SUBSCRIPTIONID"
 az config set extension.use_dynamic_install=yes_without_prompt >/dev/null
