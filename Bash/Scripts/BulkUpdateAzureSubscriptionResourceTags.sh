@@ -143,7 +143,10 @@ if [ -n "$EXCLUDE_TYPES" ]; then
   set +f
 fi
 
-UPDATED=0; SKIPPED_PRESENT=0; FAILED=0; PROCESSED=0
+UPDATED=0
+SKIPPED_PRESENT=0
+FAILED=0
+PROCESSED=0
 
 echo "Starting tagging pass for key='$TAG_KEY' value='$TAG_VALUE' ..."
 # Read IDs line-by-line (portable; no mapfile).
