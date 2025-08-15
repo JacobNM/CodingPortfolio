@@ -6,10 +6,10 @@ usage() {
   cat <<'EOF'
 Usage:
   # With full resource ID
-  update-missing-tag.sh -i <resourceId> -k <tagKey> -v <tagValue> [--dry-run]
+  UpdateAzureResourceWithTag.sh -i <resourceId> -k <tagKey> -v <tagValue> [--dry-run]
 
   # Or with RG/Name/Type
-  update-missing-tag.sh -g <resourceGroup> -n <name> -t <resourceType> -k <tagKey> -v <tagValue> [--dry-run]
+  UpdateAzureResourceWithTag.sh -g <resourceGroup> -n <name> -t <resourceType> -k <tagKey> -v <tagValue> [--dry-run]
 
 Notes:
   - <resourceType> example: Microsoft.App/containerApps (case-insensitive)
