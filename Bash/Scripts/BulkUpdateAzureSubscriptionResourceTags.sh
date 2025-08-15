@@ -1,30 +1,23 @@
 #!/usr/bin/env bash
 # BulkUpdateAzureSubscriptionResourceTags.sh
-# Add a tag (key=value) to ALL resources in a subscription where the tag is missing or empty.
-# Uses 'az resource tag --is-incremental' to avoid provider-specific validation (safer for ContainerApps, etc).
-# Requires: Azure CLI logged in with access to the target subscription.
+# Add a tag key=value to every resource in a subscription where the key is missing or empty.
+# Uses: az resource tag --is-incremental (preserves existing tags; avoids RP validation issues)
 
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
 Usage:
-BulkUpdateAzureSubscriptionResourceTags.sh -s <subscriptionIdOrName> -k <tagKey> -v <tagValue> [options]
+  BulkUpdateAzureSubscriptionResourceTags.sh -s <subscriptionIdOrName> -k <tagKey> -v <tagValue> [options]
 
 Options:
   --dry-run                 Show what would be changed, but don't apply it
-  --include-types <list>    Comma-separated resource types to include (e.g. "Microsoft.Compute/virtualMachines,Microsoft.App/containerApps")
+  --include-types <list>    Comma-separated resource types to include
   --exclude-types <list>    Comma-separated resource types to exclude
   --resource-groups <list>  Comma-separated RG names to limit scope
-  --case-sensitive          Treat tag KEY comparison as case-sensitive (default: case-insensitive best-effort)
-  --max                      Only process up to this many resources (for testing)
-  -h, --help               Show help
-
-Notes:
-  - By default, the script attempts a CASE-INSENSITIVE tag-key presence check. Azure’s tag key handling can be inconsistent across RPs,
-    so supply the exact casing you want to enforce on write. Existing differently-cased keys won’t be overwritten.
-  - Uses incremental tagging so existing tags are preserved.
-  - If any resource fails to tag, the script logs and continues.
+  --case-sensitive          Treat tag-key detection as case-sensitive (default: best-effort case-insensitive)
+  --max <N>                 Process at most N resources (useful for testing)
+  -h, --help                Show help
 
 Example usages:
   BulkUpdateAzureSubscriptionResourceTags.sh -s my-subscription -k Environment -v Production --include-types Microsoft.Compute/virtualMachines,Microsoft.App/containerApps --dry-run
@@ -38,7 +31,6 @@ Example usages:
 
   ./BulkUpdateAzureSubscriptionResourceTags.sh -s "MyProdSub" -k environment -v prod --max 25
     # This would tag up to 25 resources in the subscription with 'environment=prod' where missing/empty.
-
 EOF
 }
 
@@ -52,7 +44,7 @@ LIMIT_RGS=""
 CASE_SENSITIVE=0
 MAX_COUNT=0
 
-# Parse args
+# ---- arg parse ----
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -s|--subscription) SUB="$2"; shift 2 ;;
@@ -69,157 +61,143 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate
 if [[ -z "$SUB" || -z "$TAG_KEY" || -z "$TAG_VALUE" ]]; then
-  echo "Error: --subscription, --key and --value are required." >&2
+  echo "Error: --subscription, --key, and --value are required." >&2
   usage; exit 1
 fi
 
-if ! command -v az >/dev/null 2>&1; then
-  echo "Error: Azure CLI 'az' not found in PATH." >&2
-  exit 1
-fi
+command -v az >/dev/null 2>&1 || { echo "Error: Azure CLI 'az' not found."; exit 1; }
 
-# Set subscription
 echo "Using subscription: $SUB"
 az account set --subscription "$SUB" >/dev/null
 
-# Build base query for az resource list
-RG_FILTER=""
+# ---- Build JMESPath filter for az resource list ----
+# Start with conditions array, join with && where appropriate
+jmes_filters=()
+
+# Include types: OR across provided types
+if [[ -n "$INCLUDE_TYPES" ]]; then
+  IFS=',' read -r -a inc_arr <<< "$INCLUDE_TYPES"
+  type_conds=()
+  for t in "${inc_arr[@]}"; do
+    t_trim="${t#"${t%%[![:space:]]*}"}"; t_trim="${t_trim%"${t_trim##*[![:space:]]}"}"
+    [[ -n "$t_trim" ]] && type_conds+=("type=='$t_trim'")
+  done
+  if [[ ${#type_conds[@]} -gt 0 ]]; then
+    jmes_filters+=("(${type_conds[*]// / })")  # ORs will be joined later
+  fi
+fi
+
+# Resource groups: OR across provided RGs
 if [[ -n "$LIMIT_RGS" ]]; then
-  # Convert comma list to an OR filter in JMESPath after listing; we’ll filter in bash to keep it simple.
-  :
+  IFS=',' read -r -a rg_arr <<< "$LIMIT_RGS"
+  rg_conds=()
+  for g in "${rg_arr[@]}"; do
+    g_trim="${g#"${g%%[![:space:]]*}"}"; g_trim="${g_trim%"${g_trim##*[![:space:]]}"}"
+    [[ -n "$g_trim" ]] && rg_conds+=("resourceGroup=='$g_trim'")
+  done
+  if [[ ${#rg_conds[@]} -gt 0 ]]; then
+    jmes_filters+=("(${rg_conds[*]// / })")
+  fi
 fi
 
-# Fetch resources (id + type + rg) up front
+# Join includes with OR inside each group, then AND across groups
+# We constructed each group as "(cond || cond)", but we stored with spaces; fix joins explicitly:
+# Replace spaces between OR terms with ' || ' and between groups with ' && '
+filter_expr=""
+if [[ ${#jmes_filters[@]} -gt 0 ]]; then
+  # Each group currently "(a||b)"? Ensure proper '||'
+  cleaned=()
+  for grp in "${jmes_filters[@]}"; do
+    grp="${grp//)||/ ) || ( }" # no-op safeguard
+    # We built using spaces; rebuild ORs correctly:
+    grp="${grp//) (/ ) || ( }"
+    cleaned+=("$grp")
+  done
+  # AND across groups
+  filter_expr="$(IFS=' && '; echo "${cleaned[*]}")"
+fi
+
+# Base query
+if [[ -n "$filter_expr" ]]; then
+  LIST_QUERY="[? $filter_expr ].{id:id,type:type,rg:resourceGroup}"
+else
+  LIST_QUERY="[].{id:id,type:type,rg:resourceGroup}"
+fi
+
 echo "Enumerating resources... (this may take a bit on large subscriptions)"
-RES_JSON="$(az resource list --subscription "$SUB" --query "[].{id:id,type:type,rg:resourceGroup}" -o json)"
+RES_JSON="$(az resource list --query "$LIST_QUERY" -o json)"
 
-# Optional filtering helpers
-filter_by_types() {
-  local json="$1"
-  local incl="$2"
-  local excl="$3"
-
-  # If include set, keep only those; else if exclude set, drop those; else pass-through.
-  if [[ -n "$incl" ]]; then
-    # Build a JMESPath that matches any in list
-    local IFS=','; read -r -a arr <<< "$incl"
-    local conds=()
-    for t in "${arr[@]}"; do conds+=("type=='$t'"); done
-    local jpcond
-    jpcond=$(IFS=" || "; echo "${conds[*]}")
-    az jq <<EOF "$json"
-[.[] | select(.type != null) | select($jpcond)]
-EOF
-    return
-  fi
-
-  if [[ -n "$excl" ]]; then
-    local IFS=','; read -r -a arr <<< "$excl"
-    local conds=()
-    for t in "${arr[@]}"; do conds+=("type!='$t'"); done
-    local jpcond
-    jpcond=$(IFS=" && "; echo "${conds[*]}")
-    az jq <<EOF "$json"
-[.[] | select(.type != null) | select($jpcond)]
-EOF
-    return
-  fi
-
-  # No include/exclude -> echo original
-  echo "$json"
-}
-
-filter_by_rgs() {
-  local json="$1"
-  local rgs="$2"
-  if [[ -z "$rgs" ]]; then
-    echo "$json"; return
-  fi
-  local IFS=','; read -r -a arr <<< "$rgs"
-  local conds=()
-  for g in "${arr[@]}"; do conds+=("rg=='$g'"); done
-  local jpcond
-  jpcond=$(IFS=" || "; echo "${conds[*]}")
-  az jq <<EOF "$json"
-[.[] | select(.rg != null) | select($jpcond)]
-EOF
-}
-
-# Tiny helper to use Azure CLI's built-in JMESPath "jq-like" filtering via `az` (no external jq required)
-az jq() { az json -c "$@"; } 2>/dev/null || true
-# Fallback if 'az json -c' isn't available (older CLI). We'll just pass through unfiltered.
-if ! az json -h >/dev/null 2>&1; then
-  az() { command az "$@"; }  # restore
-  filter_by_types() { echo "$1"; }
-  filter_by_rgs()   { echo "$1"; }
+# If we also got exclude types, drop them in bash
+if [[ -n "$EXCLUDE_TYPES" ]]; then
+  IFS=',' read -r -a exc_arr <<< "$EXCLUDE_TYPES"
+else
+  exc_arr=()
 fi
 
-RES_JSON="$(filter_by_types "$RES_JSON" "$INCLUDE_TYPES" "$EXCLUDE_TYPES")"
-RES_JSON="$(filter_by_rgs   "$RES_JSON" "$LIMIT_RGS")"
+# Extract IDs to iterate
+mapfile -t IDS < <(echo "$RES_JSON" | az jq --query "[].id" -o tsv 2>/dev/null || true)
+# Fallback if 'az jq' isn’t available; use standard az to print via loop
+if [[ ${#IDS[@]} -eq 0 ]]; then
+  IDS=()
+  while IFS= read -r id; do [[ -n "$id" ]] && IDS+=("$id"); done < <(az resource list --query "$LIST_QUERY[].id" -o tsv 2>/dev/null || true)
+fi
 
-TOTAL="$(echo "$RES_JSON" | az json -c 'length(@)' 2>/dev/null || echo 0)"
+TOTAL="${#IDS[@]}"
 echo "Found $TOTAL resource(s) after filtering."
 
 if [[ "$TOTAL" -eq 0 ]]; then
   echo "Nothing to do."; exit 0
 fi
 
-# Iterate
-UPDATED=0
-SKIPPED_PRESENT=0
-FAILED=0
-PROCESSED=0
-
-# Extract IDs as TSV for simple iteration
-IDS="$(echo "$RES_JSON" | az json -c "[].id" -o tsv 2>/dev/null || true)"
-if [[ -z "$IDS" ]]; then
-  echo "No resource IDs parsed; exiting."
-  exit 0
-fi
+UPDATED=0; SKIPPED_PRESENT=0; FAILED=0; PROCESSED=0
 
 echo "Starting tagging pass for key='$TAG_KEY' value='$TAG_VALUE' ..."
-while IFS= read -r RID; do
-  [[ -z "$RID" ]] && continue
-
-  PROCESSED=$((PROCESSED+1))
+for RID in "${IDS[@]}"; do
+  ((PROCESSED++))
   if [[ $MAX_COUNT -gt 0 && $PROCESSED -gt $MAX_COUNT ]]; then
     echo "Reached --max=$MAX_COUNT limit; stopping early."
     break
   fi
 
-  # Fetch existing tags (JSON). Null-safe.
-  TAGS_JSON="$(az resource show --ids "$RID" --query "tags" -o json 2>/dev/null || echo 'null')"
-
-  # Decide presence: case-insensitive best effort by searching keys list
-  HAS_KEY=0
-  if [[ "$CASE_SENSITIVE" -eq 1 ]]; then
-    VAL_JSON="$(az resource show --ids "$RID" --query "tags['$TAG_KEY']" -o json 2>/dev/null || echo 'null')"
-    # Present if not null and not empty string
-    if [[ "$VAL_JSON" != "null" && "$VAL_JSON" != '""' ]]; then
-      HAS_KEY=1
-    fi
-  else
-    # Pull keys as TSV; compare lowercased in bash
-    KEYS_TSV="$(az resource show --ids "$RID" --query "keys(tags || `{}`)" -o tsv 2>/dev/null || true)"
-    shopt -s nocasematch
-    for k in $KEYS_TSV; do
-      if [[ "$k" == "$TAG_KEY" ]]; then
-        # Check value not empty
-        VAL_JSON="$(az resource show --ids "$RID" --query "tags['$k']" -o json 2>/dev/null || echo 'null')"
-        if [[ "$VAL_JSON" != "null" && "$VAL_JSON" != '""' ]]; then
-          HAS_KEY=1
-          break
-        fi
+  # Skip excluded types if requested
+  if [[ ${#exc_arr[@]} -gt 0 ]]; then
+    RTYPE="$(az resource show --ids "$RID" --query type -o tsv 2>/dev/null || echo "")"
+    for xt in "${exc_arr[@]}"; do
+      if [[ "$RTYPE" == "$xt" ]]; then
+        echo "[$PROCESSED/$TOTAL] $RID — excluded type '$RTYPE', skipping."
+        continue 2
       fi
     done
-    shopt -u nocasematch
+  fi
+
+  # Pull keys(tags) to detect presence (null-safe)
+  KEYS_TSV="$(az resource show --ids "$RID" --query "keys(tags || `{}`)" -o tsv 2>/dev/null || true)"
+
+  HAS_KEY=0
+  if [[ "$CASE_SENSITIVE" -eq 1 ]]; then
+    for k in $KEYS_TSV; do
+      if [[ "$k" == "$TAG_KEY" ]]; then
+        VAL_JSON="$(az resource show --ids "$RID" --query "tags['$k']" -o json 2>/dev/null || echo 'null')"
+        if [[ "$VAL_JSON" != "null" && "$VAL_JSON" != '""' ]]; then HAS_KEY=1; fi
+        break
+      fi
+    done
+  else
+    tk_lc="$(echo -n "$TAG_KEY" | tr 'A-Z' 'a-z')"
+    for k in $KEYS_TSV; do
+      klc="$(echo -n "$k" | tr 'A-Z' 'a-z')"
+      if [[ "$klc" == "$tk_lc" ]]; then
+        VAL_JSON="$(az resource show --ids "$RID" --query "tags['$k']" -o json 2>/dev/null || echo 'null')"
+        if [[ "$VAL_JSON" != "null" && "$VAL_JSON" != '""' ]]; then HAS_KEY=1; fi
+        break
+      fi
+    done
   fi
 
   if [[ $HAS_KEY -eq 1 ]]; then
     echo "[$PROCESSED/$TOTAL] $RID — tag present, skipping."
-    SKIPPED_PRESENT=$((SKIPPED_PRESENT+1))
+    ((SKIPPED_PRESENT++))
     continue
   fi
 
@@ -231,13 +209,12 @@ while IFS= read -r RID; do
   fi
 
   if az resource tag --ids "$RID" --is-incremental --tags "$TAG_KEY=$TAG_VALUE" >/dev/null 2>&1; then
-    UPDATED=$((UPDATED+1))
+    ((UPDATED++))
   else
     echo "  WARN: tagging failed for $RID (continuing)" >&2
-    FAILED=$((FAILED+1))
+    ((FAILED++))
   fi
-
-done <<< "$IDS"
+done
 
 echo "----------"
 echo "Done."
