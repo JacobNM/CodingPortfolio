@@ -164,14 +164,16 @@ while IFS= read -r RID; do
   fi
 
   # Get existing tag keys (safe if null)
-  KEYS_TSV="$(az resource show --ids "$RID" --query "keys(tags || `{}`)" -o tsv 2>/dev/null || true)"
+  KEYS_TSV="$(az resource show --ids "$RID" --query 'keys(tags || `{}`)' -o tsv 2>/dev/null || true)"
 
   HAS_KEY=0
   if [ "$CASE_SENSITIVE" -eq 1 ]; then
     for k in $KEYS_TSV; do
       if [ "$k" = "$TAG_KEY" ]; then
         VAL_JSON="$(az resource show --ids "$RID" --query "tags['$k']" -o json 2>/dev/null || echo 'null')"
-        if [ "$VAL_JSON" != "null" ] && [ "$VAL_JSON" != '""' ]; then HAS_KEY=1; fi
+        if [ "$VAL_JSON" != "null" ] && [ "$VAL_JSON" != '""' ]; then 
+          HAS_KEY=1
+        fi
         break
       fi
     done
@@ -181,7 +183,9 @@ while IFS= read -r RID; do
       klc="$(printf "%s" "$k" | tr 'A-Z' 'a-z')"
       if [ "$klc" = "$tk_lc" ]; then
         VAL_JSON="$(az resource show --ids "$RID" --query "tags['$k']" -o json 2>/dev/null || echo 'null')"
-        if [ "$VAL_JSON" != "null" ] && [ "$VAL_JSON" != '""' ]; then HAS_KEY=1; fi
+        if [ "$VAL_JSON" != "null" ] && [ "$VAL_JSON" != '""' ]; then 
+          HAS_KEY=1
+        fi
         break
       fi
     done
