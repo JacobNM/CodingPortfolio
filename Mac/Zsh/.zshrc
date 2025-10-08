@@ -134,6 +134,10 @@ alias gsta="git stash apply"
 alias gstp="git stash pop"
 alias gcl="git clone"
 
+## Add AZ cli Aliases
+alias azl="az login"
+alias azlsa="az account list"
+
 export PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"
 eval "$(/opt/homebrew/bin/brew shellenv)"
 source ~/.config/op/plugins.sh
