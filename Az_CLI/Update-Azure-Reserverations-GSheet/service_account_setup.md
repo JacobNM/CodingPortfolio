@@ -38,7 +38,7 @@
 ### 4. Test It
 ```bash
 # Generate CSV
-./update_gsheet_with_azure_vm_vmss_inventory.sh -f test.csv --no-gsheet
+./update_gsheet_azure_vm_vmss_inventory.sh -f test.csv --no-gsheet
 
 # Test service account update
 python3 update_gsheet_service_account.py test.csv "YOUR_SPREADSHEET_ID" -s "Test Sheet"
@@ -49,7 +49,7 @@ python3 update_gsheet_service_account.py test.csv "YOUR_SPREADSHEET_ID" -s "Test
 Az_CLI/
 ├── service-account-key.json          # ← Your downloaded key file
 ├── update_gsheet_service_account.py  # ← Service account updater
-├── update_gsheet_with_azure_vm_vmss_inventory.sh
+├── update_gsheet_azure_vm_vmss_inventory.sh
 └── ... other files
 ```
 
@@ -57,7 +57,7 @@ Az_CLI/
 The main script will automatically detect and use the service account method:
 ```bash
 # This will use service account if service-account-key.json exists
-./update_gsheet_with_azure_vm_vmss_inventory.sh -g "YOUR_SPREADSHEET_ID"
+./update_gsheet_azure_vm_vmss_inventory.sh -g "YOUR_SPREADSHEET_ID"
 ```
 
 ## Security Notes

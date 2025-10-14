@@ -32,16 +32,16 @@ This directory contains scripts for collecting Azure Virtual Machine (VM) and Vi
 3. **Run Inventory**:
    ```bash
    # Interactive mode (prompts for options)
-   ./update_gsheet_with_azure_vm_vmss_inventory.sh
+   ./update_gsheet_azure_vm_vmss_inventory.sh
    
    # Console output only
-   ./update_gsheet_with_azure_vm_vmss_inventory.sh -c
+   ./update_gsheet_azure_vm_vmss_inventory.sh -c
    
    # Save to CSV file
-   ./update_gsheet_with_azure_vm_vmss_inventory.sh -f my_inventory.csv
+   ./update_gsheet_azure_vm_vmss_inventory.sh -f my_inventory.csv
    
    # Update Google Sheet
-   ./update_gsheet_with_azure_vm_vmss_inventory.sh -g "YOUR_SPREADSHEET_ID" -s "Azure Inventory"
+   ./update_gsheet_azure_vm_vmss_inventory.sh -g "YOUR_SPREADSHEET_ID" -s "Azure Inventory"
    ```
 
 ## Data Collected
@@ -102,23 +102,23 @@ The script collects the following information for each resource:
 
 ```bash
 # Update specific Google Sheet
-./update_gsheet_with_azure_vm_vmss_inventory.sh \
+./update_gsheet_azure_vm_vmss_inventory.sh \
   -g "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" \
   -s "Azure VM Inventory"
 
 # Save CSV and update Google Sheet
-./update_gsheet_with_azure_vm_vmss_inventory.sh \
+./update_gsheet_azure_vm_vmss_inventory.sh \
   -f "azure_inventory_$(date +%Y%m%d).csv" \
   -g "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
 
 # Skip Google Sheets update
-./update_gsheet_with_azure_vm_vmss_inventory.sh --no-gsheet -f data.csv
+./update_gsheet_azure_vm_vmss_inventory.sh --no-gsheet -f data.csv
 ```
 
 ## Command Line Options
 
 ```
-Usage: ./update_gsheet_with_azure_vm_vmss_inventory.sh [OPTIONS]
+Usage: ./update_gsheet_azure_vm_vmss_inventory.sh [OPTIONS]
 
 Options:
   -h, --help              Show help message
@@ -130,10 +130,10 @@ Options:
   --no-gsheet             Skip Google Sheets update
 
 Examples:
-  ./update_gsheet_with_azure_vm_vmss_inventory.sh                    # Interactive mode
-  ./update_gsheet_with_azure_vm_vmss_inventory.sh -c                # Console output
-  ./update_gsheet_with_azure_vm_vmss_inventory.sh -f inventory.csv  # Save to CSV
-  ./update_gsheet_with_azure_vm_vmss_inventory.sh -g ID -s "Sheet"  # Update Google Sheet
+  ./update_gsheet_azure_vm_vmss_inventory.sh                    # Interactive mode
+  ./update_gsheet_azure_vm_vmss_inventory.sh -c                # Console output
+  ./update_gsheet_azure_vm_vmss_inventory.sh -f inventory.csv  # Save to CSV
+  ./update_gsheet_azure_vm_vmss_inventory.sh -g ID -s "Sheet"  # Update Google Sheet
 ```
 
 ## Output Format
@@ -164,7 +164,7 @@ VMSS,api-scale-set,prod-rg,Production,eastus,Standard_B2s,3,Succeeded,,true,2,10
 
 ## Files
 
-- `update_gsheet_with_azure_vm_vmss_inventory.sh` - Main inventory script with Google Sheets integration
+- `update_gsheet_azure_vm_vmss_inventory.sh` - Main inventory script with Google Sheets integration
 - `update_gsheet.py` - Python script for Google Sheets API operations
 - `setup.sh` - Environment setup and dependency installation
 - `requirements.txt` - Python dependencies for Google Sheets integration
