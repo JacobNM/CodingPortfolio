@@ -1,5 +1,0 @@
-ResourceType,Name,ResourceGroup,Subscription,Location,SKU,Capacity,PowerState,OsType,AutoscaleEnabled,AutoscaleMinCapacity,AutoscaleMaxCapacity,AutoscaleDefaultCapacity
-VM,test-web-server,test-rg,Test-Subscription,eastus,Standard_D2s_v3,,VM running,Linux,N/A,N/A,N/A,N/A
-VM,test-db-server,test-rg,Test-Subscription,westus2,Standard_E4s_v3,,VM stopped,Windows,N/A,N/A,N/A,N/A
-VMSS,test-api-scaleset,test-rg,Test-Subscription,eastus,Standard_B2s,3,Succeeded,,true,2,10,3
-VMSS,test-web-scaleset,test-rg,Test-Subscription,westus2,Standard_D2s_v3,1,Succeeded,,false,N/A,N/A,N/A
