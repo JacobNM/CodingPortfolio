@@ -441,11 +441,13 @@ update_google_sheet() {
     # Prefer service account method if available
     if [[ -f "$service_account_key" ]] && [[ -f "$service_account_script" ]]; then
         print_status "Using service account authentication (no browser required)"
-        python3 "$service_account_script" "$csv_file" "$spreadsheet_id" --sheet-name "$sheet_name"
+        print_status "Mode: Selective update (only changes differing values)"
+        python3 "$service_account_script" "$csv_file" "$spreadsheet_id" --sheet-name "$sheet_name" --verbose
         return $?
     elif [[ -f "$oauth_script" ]]; then
         print_status "Using OAuth authentication (browser required)"
-        python3 "$oauth_script" "$csv_file" "$spreadsheet_id" --sheet-name "$sheet_name"
+        print_status "Mode: Selective update (only changes differing values)"
+        python3 "$oauth_script" "$csv_file" "$spreadsheet_id" --sheet-name "$sheet_name" --verbose
         return $?
     else
         print_error "No Google Sheets updater script found"

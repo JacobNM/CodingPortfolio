@@ -99,17 +99,16 @@ class GoogleSheetsServiceAccountUpdater:
             self.logger.error(f"Error reading CSV file: {e}")
             return []
     
-    def update_sheet(self, spreadsheet_id: str, sheet_name: str, csv_file: str, 
-                    start_cell: str = 'A1', clear_existing: bool = True) -> bool:
-        """Update Google Sheet with data from CSV file."""
+    def update_sheet_selective(self, spreadsheet_id: str, sheet_name: str, csv_file: str) -> bool:
+        """Selectively update Google Sheet with data from CSV file - only update specific columns where values differ."""
         
         if not self.service:
             self.logger.error("Google Sheets service not initialized. Call authenticate() first.")
             return False
         
         # Read CSV data
-        data = self.read_csv_data(csv_file)
-        if not data:
+        csv_data = self.read_csv_data(csv_file)
+        if not csv_data:
             self.logger.error("No data to update")
             return False
         
@@ -125,30 +124,189 @@ class GoogleSheetsServiceAccountUpdater:
                 self.logger.error(f"Sheet '{sheet_name}' not found. Available sheets: {sheet_names}")
                 return False
             
-            # Clear existing data if requested
-            if clear_existing:
-                self.logger.info(f"Clearing existing data in sheet '{sheet_name}'")
-                clear_range = f"{sheet_name}!A:Z"  # Clear columns A through Z
-                self.service.spreadsheets().values().clear(
-                    spreadsheetId=spreadsheet_id,
-                    range=clear_range
-                ).execute()
-            
-            # Update with new data
-            range_name = f"{sheet_name}!{start_cell}"
-            body = {
-                'values': data
-            }
-            
-            result = self.service.spreadsheets().values().update(
+            # Read existing sheet data
+            self.logger.info(f"Reading existing data from sheet '{sheet_name}'")
+            range_name = f"{sheet_name}!A:Z"  # Read all columns
+            sheet_result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=range_name,
-                valueInputOption='RAW',
-                body=body
+                range=range_name
             ).execute()
             
-            updated_cells = result.get('updatedCells', 0)
-            self.logger.info(f"Successfully updated {updated_cells} cells in '{sheet_name}'")
+            existing_data = sheet_result.get('values', [])
+            if not existing_data:
+                self.logger.error("No existing data found in sheet")
+                return False
+            
+            # Find column indices in both CSV and GSheet
+            csv_header = csv_data[0] if csv_data else []
+            gsheet_header = existing_data[0] if existing_data else []
+            
+            self.logger.info(f"CSV columns: {csv_header}")
+            self.logger.info(f"GSheet columns: {gsheet_header}")
+            
+            # Map CSV columns to indices
+            csv_indices = {
+                'name': self._find_column_index(csv_header, ['Name']),
+                'sku': self._find_column_index(csv_header, ['SKU']),
+                'autoscale_min': self._find_column_index(csv_header, ['AutoscaleMinCapacity']),
+                'autoscale_max': self._find_column_index(csv_header, ['AutoscaleMaxCapacity']),
+                'autoscale_current': self._find_column_index(csv_header, ['AutoscaleDefaultCapacity'])
+            }
+            
+            # Map GSheet columns to indices (case-insensitive search)
+            gsheet_indices = {
+                'group': self._find_column_index(gsheet_header, ['Group'], case_sensitive=False),
+                'sku': self._find_column_index(gsheet_header, ['SKU'], case_sensitive=False),
+                'current': self._find_column_index(gsheet_header, ['current'], case_sensitive=False),
+                'min': self._find_column_index(gsheet_header, ['min'], case_sensitive=False),
+                'max': self._find_column_index(gsheet_header, ['max'], case_sensitive=False)
+            }
+            
+            self.logger.info(f"CSV column mapping: {csv_indices}")
+            self.logger.info(f"GSheet column mapping: {gsheet_indices}")
+            
+            # Validate that required columns exist
+            if csv_indices['name'] is None:
+                self.logger.error("CSV 'Name' column not found")
+                return False
+            if gsheet_indices['group'] is None:
+                self.logger.error("GSheet 'Group' column not found")
+                return False
+            
+            # Process updates
+            changes_made = []
+            new_resources = []
+            
+            # Skip CSV header row
+            for csv_row_idx, csv_row in enumerate(csv_data[1:], start=2):
+                if not csv_row or len(csv_row) <= csv_indices['name']:
+                    continue
+                
+                resource_name = csv_row[csv_indices['name']].strip()
+                if not resource_name:
+                    continue
+                
+                self.logger.info(f"Processing CSV resource: {resource_name}")
+                
+                # Find matching row in GSheet (exact match only, case-insensitive)
+                gsheet_row_idx = None
+                for idx, gsheet_row in enumerate(existing_data[1:], start=2):  # Skip header
+                    if len(gsheet_row) <= gsheet_indices['group']:
+                        continue
+                        
+                    gsheet_group = gsheet_row[gsheet_indices['group']].strip()
+                    if not gsheet_group:
+                        continue
+                    
+                    # Only exact match (case-insensitive)
+                    if gsheet_group.lower() == resource_name.lower():
+                        gsheet_row_idx = idx
+                        self.logger.info(f"Exact match found: '{resource_name}' = '{gsheet_group}'")
+                        break
+                
+                if gsheet_row_idx is not None:
+                    # Resource found - check for updates
+                    gsheet_row = existing_data[gsheet_row_idx - 1]  # Adjust for 0-based indexing
+                    updates_needed = []
+                    
+                    # Check SKU
+                    if (csv_indices['sku'] is not None and 
+                        gsheet_indices['sku'] is not None and 
+                        len(csv_row) > csv_indices['sku']):
+                        
+                        csv_sku = csv_row[csv_indices['sku']].strip()
+                        gsheet_sku = gsheet_row[gsheet_indices['sku']].strip() if len(gsheet_row) > gsheet_indices['sku'] else ""
+                        
+                        if csv_sku and (not gsheet_sku or csv_sku != gsheet_sku):
+                            updates_needed.append({
+                                'column': gsheet_indices['sku'],
+                                'value': csv_sku,
+                                'field': 'SKU',
+                                'old_value': gsheet_sku
+                            })
+                    
+                    # Check autoscale values
+                    autoscale_mappings = [
+                        ('autoscale_current', 'current', 'Current Capacity'),
+                        ('autoscale_min', 'min', 'Min Capacity'),
+                        ('autoscale_max', 'max', 'Max Capacity')
+                    ]
+                    
+                    for csv_key, gsheet_key, field_name in autoscale_mappings:
+                        if (csv_indices[csv_key] is not None and 
+                            gsheet_indices[gsheet_key] is not None and 
+                            len(csv_row) > csv_indices[csv_key]):
+                            
+                            csv_value = csv_row[csv_indices[csv_key]].strip()
+                            gsheet_value = gsheet_row[gsheet_indices[gsheet_key]].strip() if len(gsheet_row) > gsheet_indices[gsheet_key] else ""
+                            
+                            # Only update if CSV has a meaningful value and it's different
+                            if csv_value and csv_value.lower() not in ['n/a', '', 'null']:
+                                if not gsheet_value or csv_value != gsheet_value:
+                                    updates_needed.append({
+                                        'column': gsheet_indices[gsheet_key],
+                                        'value': csv_value,
+                                        'field': field_name,
+                                        'old_value': gsheet_value
+                                    })
+                    
+                    # Apply updates if needed
+                    if updates_needed:
+                        for update in updates_needed:
+                            cell_address = f"{sheet_name}!{self._column_number_to_letter(update['column'] + 1)}{gsheet_row_idx}"
+                            
+                            self.service.spreadsheets().values().update(
+                                spreadsheetId=spreadsheet_id,
+                                range=cell_address,
+                                valueInputOption='RAW',
+                                body={'values': [[update['value']]]}
+                            ).execute()
+                            
+                            change_msg = f"Updated {resource_name} -> {update['field']}: '{update['old_value']}' → '{update['value']}'"
+                            changes_made.append(change_msg)
+                            self.logger.info(change_msg)
+                
+                else:
+                    # Resource not found - provide more detailed logging
+                    self.logger.warning(f"No matching row found for CSV resource: '{resource_name}'")
+                    self.logger.info(f"Available Google Sheet groups: {[row[gsheet_indices['group']].strip() for row in existing_data[1:] if len(row) > gsheet_indices['group'] and row[gsheet_indices['group']].strip()][:10]}...")
+                    
+                    # Add to new resources list
+                    new_resources.append(csv_row)
+                    self.logger.info(f"Will add as new resource: {resource_name}")
+            
+            # Append new resources at the bottom of the sheet
+            if new_resources:
+                last_row = len(existing_data) + 1
+                new_data_range = f"{sheet_name}!A{last_row}"
+                
+                self.service.spreadsheets().values().update(
+                    spreadsheetId=spreadsheet_id,
+                    range=new_data_range,
+                    valueInputOption='RAW',
+                    body={'values': new_resources}
+                ).execute()
+                
+                for resource in new_resources:
+                    if len(resource) > csv_indices['name']:
+                        resource_name = resource[csv_indices['name']].strip()
+                        change_msg = f"Added new resource: {resource_name}"
+                        changes_made.append(change_msg)
+                        self.logger.info(change_msg)
+            
+            # Summary
+            self.logger.info(f"\n=== UPDATE SUMMARY ===")
+            self.logger.info(f"Total changes made: {len(changes_made)}")
+            self.logger.info(f"Resources updated: {len(changes_made) - len(new_resources)}")
+            self.logger.info(f"New resources added: {len(new_resources)}")
+            
+            if changes_made:
+                self.logger.info("\nDetailed changes:")
+                for change in changes_made:
+                    self.logger.info(f"  • {change}")
+            else:
+                self.logger.info("No changes were needed - all data is already up to date!")
+            
             return True
             
         except Exception as e:
@@ -158,6 +316,34 @@ class GoogleSheetsServiceAccountUpdater:
                 self.logger.error("1. Is the Google Sheet shared with the service account?")
                 self.logger.error("2. Does the service account have 'Editor' permissions?")
             return False
+    
+    def _find_column_index(self, header_row: List[str], search_terms: List[str], case_sensitive: bool = True) -> int:
+        """Find column index by searching for terms in header row."""
+        for term in search_terms:
+            for idx, col_name in enumerate(header_row):
+                if case_sensitive:
+                    if col_name.strip() == term:
+                        return idx
+                else:
+                    if col_name.strip().lower() == term.lower():
+                        return idx
+        return None
+    
+    def _column_number_to_letter(self, column_number: int) -> str:
+        """Convert column number to Excel-style letter (1=A, 2=B, etc.)."""
+        column_letter = ""
+        while column_number > 0:
+            column_number -= 1
+            column_letter = chr(column_number % 26 + ord('A')) + column_letter
+            column_number //= 26
+        return column_letter
+    
+    def update_sheet(self, spreadsheet_id: str, sheet_name: str, csv_file: str, 
+                    start_cell: str = 'A1', clear_existing: bool = True) -> bool:
+        """Update Google Sheet with data from CSV file - wrapper that chooses update method."""
+        
+        # Always use selective update method (ignore clear_existing parameter)
+        return self.update_sheet_selective(spreadsheet_id, sheet_name, csv_file)
     
     def create_summary_stats(self, csv_file: str) -> Dict[str, int]:
         """Create summary statistics from CSV data."""
