@@ -423,12 +423,99 @@ collect_data() {
     fi
 }
 
+# Function to update Google Sheet with CSV data
+update_google_sheet() {
+    local csv_file="$1"
+    local spreadsheet_id="$2"
+    local sheet_name="$3"
+    
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local service_account_script="$script_dir/update_gsheet_service_account.py"
+    local oauth_script="$script_dir/update_gsheet.py"
+    local service_account_key="$script_dir/service-account-key.json"
+    
+    print_status "Updating Google Sheet..."
+    print_status "Spreadsheet ID: $spreadsheet_id"
+    print_status "Sheet Name: $sheet_name"
+    
+    # Prefer service account method if available
+    if [[ -f "$service_account_key" ]] && [[ -f "$service_account_script" ]]; then
+        print_status "Using service account authentication (no browser required)"
+        python3 "$service_account_script" "$csv_file" "$spreadsheet_id" --sheet-name "$sheet_name"
+        return $?
+    elif [[ -f "$oauth_script" ]]; then
+        print_status "Using OAuth authentication (browser required)"
+        python3 "$oauth_script" "$csv_file" "$spreadsheet_id" --sheet-name "$sheet_name"
+        return $?
+    else
+        print_error "No Google Sheets updater script found"
+        print_status "Available methods:"
+        print_status "1. Service Account: Place 'service-account-key.json' in this directory"
+        print_status "2. OAuth: Run setup.sh to configure OAuth credentials"
+        return 1
+    fi
+}
+
+# Function to get Google Sheet configuration
+get_google_sheet_config() {
+    echo
+    print_status "Google Sheets Integration Configuration"
+    echo "=========================================="
+    echo
+    
+    # Ask if user wants to update Google Sheets
+    while true; do
+        read -p "Do you want to update a Google Sheet with this data? (y/n): " update_gsheet
+        case $update_gsheet in
+            [Yy]*)
+                break
+                ;;
+            [Nn]*)
+                export SKIP_GSHEET_UPDATE="true"
+                return 0
+                ;;
+            *)
+                echo "Please answer yes or no."
+                ;;
+        esac
+    done
+    
+    # Get spreadsheet ID
+    echo
+    echo "To get your Google Sheets spreadsheet ID:"
+    echo "1. Open your Google Sheet in a browser"
+    echo "2. Copy the ID from the URL:"
+    echo "   https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit"
+    echo
+    
+    while true; do
+        read -p "Enter Google Sheets spreadsheet ID: " gsheet_id
+        if [[ -n "$gsheet_id" ]]; then
+            export GSHEET_SPREADSHEET_ID="$gsheet_id"
+            break
+        else
+            echo "Please enter a valid spreadsheet ID."
+        fi
+    done
+    
+    # Get sheet name (optional)
+    read -p "Enter sheet name [Azure Inventory]: " gsheet_name
+    gsheet_name=${gsheet_name:-"Azure Inventory"}
+    export GSHEET_SHEET_NAME="$gsheet_name"
+    
+    echo
+    print_success "Google Sheets configuration saved:"
+    print_success "  Spreadsheet ID: $GSHEET_SPREADSHEET_ID"
+    print_success "  Sheet Name: $GSHEET_SHEET_NAME"
+}
+
 # Function to display help
 show_help() {
-    echo "Azure VM and VMSS Inventory Script with Autoscaling Information"
+    echo "Azure VM and VMSS Inventory Script with Google Sheets Integration"
     echo "Usage: $0 [OPTIONS]"
     echo
-    echo "This script collects VM and VMSS information from all accessible Azure subscriptions."
+    echo "This script collects VM and VMSS information from all accessible Azure subscriptions"
+    echo "and optionally updates a Google Sheet with the data."
     echo "For VMSS resources, it also retrieves autoscaling configuration including:"
     echo "  - Autoscale enabled status"
     echo "  - Minimum capacity"
@@ -440,12 +527,23 @@ show_help() {
     echo "  -f, --file FILENAME     Specify output CSV filename"
     echo "  -c, --console           Output to console only (no CSV file)"
     echo "  -v, --verbose           Show detailed progress messages"
+    echo "  -g, --gsheet ID         Google Sheets spreadsheet ID"
+    echo "  -s, --sheet NAME        Google Sheets sheet name [Azure Inventory]"
+    echo "  --no-gsheet             Skip Google Sheets update"
     echo
     echo "Examples:"
-    echo "  $0                                    # Interactive mode"
-    echo "  $0 -f my_inventory.csv               # Save to specific file"
-    echo "  $0 -c                                # Console table output (clean)"
-    echo "  $0 -c -v                             # Console table with progress messages"
+    echo "  $0                                          # Interactive mode"
+    echo "  $0 -f my_inventory.csv                     # Save to specific file"
+    echo "  $0 -c                                      # Console table output (clean)"
+    echo "  $0 -c -v                                   # Console table with progress"
+    echo "  $0 -g 1ABC...XYZ -s \"VM Inventory\"        # Update specific Google Sheet"
+    echo "  $0 --no-gsheet                             # Skip Google Sheets integration"
+    echo
+    echo "Google Sheets Setup (Service Account - Recommended):"
+    echo "  1. Follow QUICK_SETUP.md (5 minutes total)"
+    echo "  2. Download service-account-key.json from Google Cloud Console"
+    echo "  3. Share your Google Sheet with the service account email"
+    echo "  4. Run: ./validate_setup.py to test your setup"
     echo
     echo "CSV Columns:"
     echo "  ResourceType, Name, ResourceGroup, Subscription, Location,"
@@ -477,6 +575,28 @@ parse_args() {
                 ;;
             -v|--verbose)
                 export SHOW_STATUS="true"
+                shift
+                ;;
+            -g|--gsheet)
+                if [[ -n "$2" ]] && [[ "$2" != -* ]]; then
+                    export GSHEET_SPREADSHEET_ID="$2"
+                    shift 2
+                else
+                    print_error "Option $1 requires a spreadsheet ID argument"
+                    exit 1
+                fi
+                ;;
+            -s|--sheet)
+                if [[ -n "$2" ]] && [[ "$2" != -* ]]; then
+                    export GSHEET_SHEET_NAME="$2"
+                    shift 2
+                else
+                    print_error "Option $1 requires a sheet name argument"
+                    exit 1
+                fi
+                ;;
+            --no-gsheet)
+                export SKIP_GSHEET_UPDATE="true"
                 shift
                 ;;
             *)
@@ -516,8 +636,30 @@ main() {
         get_output_preference
     fi
     
+    # Get Google Sheets configuration if needed
+    if [[ "$OUTPUT_MODE" == "csv" ]] && [[ "$SKIP_GSHEET_UPDATE" != "true" ]] && [[ -z "$GSHEET_SPREADSHEET_ID" ]]; then
+        get_google_sheet_config
+    fi
+    
     # Collect the data
     collect_data
+    
+    # Update Google Sheet if configured and CSV mode
+    if [[ "$OUTPUT_MODE" == "csv" ]] && [[ "$SKIP_GSHEET_UPDATE" != "true" ]] && [[ -n "$GSHEET_SPREADSHEET_ID" ]]; then
+        echo
+        print_status "Updating Google Sheet..."
+        
+        # Set default sheet name if not provided
+        local sheet_name="${GSHEET_SHEET_NAME:-Azure Inventory}"
+        
+        if update_google_sheet "$OUTPUT_FILE" "$GSHEET_SPREADSHEET_ID" "$sheet_name"; then
+            print_success "Google Sheet updated successfully!"
+            print_success "View at: https://docs.google.com/spreadsheets/d/$GSHEET_SPREADSHEET_ID"
+        else
+            print_warning "Google Sheet update failed, but CSV file was created successfully."
+            print_status "You can manually upload the CSV file: $OUTPUT_FILE"
+        fi
+    fi
     
     echo
     print_success "Script completed successfully!"
