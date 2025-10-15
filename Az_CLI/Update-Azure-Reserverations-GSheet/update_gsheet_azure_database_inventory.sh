@@ -305,45 +305,31 @@ get_cosmosdb_data() {
         print_status "Collecting Cosmos DB data for subscription: $subscription_name"
     fi
     
-    # Query for Cosmos DB accounts
-    local cosmos_query='
-    Resources
-    | where type =~ "Microsoft.DocumentDB/databaseAccounts"
-    | project 
-        name,
-        resourceGroup,
-        location,
-        kind = kind,
-        status = properties.provisioningState,
-        consistencyLevel = properties.consistencyPolicy.defaultConsistencyLevel,
-        capabilities = properties.capabilities,
-        backupPolicy = properties.backupPolicy.type,
-        multiRegion = properties.enableMultipleWriteLocations,
-        fqdn = properties.documentEndpoint,
-        tags,
-        subscriptionId
-    '
-    
-    # Execute query and process results
+    # Use Azure CLI to list Cosmos DB accounts
     local cosmos_data
-    cosmos_data=$(az graph query -q "$cosmos_query" --subscriptions "$subscription_id" --output json 2>/dev/null || echo "[]")
+    cosmos_data=$(az cosmosdb list --subscription "$subscription_id" --output json 2>/dev/null || echo "[]")
     
     if [[ "$cosmos_data" != "[]" ]] && [[ -n "$cosmos_data" ]]; then
         echo "$cosmos_data" | jq -r --arg sub_name "$subscription_name" '
-        .data[] | 
-        "CosmosDB," + 
+        .[] | 
+        (if (.kind | ascii_downcase | contains("cassandra")) then "CosmosDB-Cassandra"
+         elif (.kind | ascii_downcase | contains("mongo")) then "CosmosDB-MongoDB" 
+         elif (.kind | ascii_downcase | contains("gremlin")) then "CosmosDB-Gremlin"
+         elif (.kind | ascii_downcase | contains("table")) then "CosmosDB-Table"
+         elif (.kind | ascii_downcase | contains("sql")) then "CosmosDB-SQL"
+         else "CosmosDB" end) + "," + 
         .name + "," + 
         .resourceGroup + "," + 
         $sub_name + "," + 
         .location + "," + 
         (.kind // "N/A") + "," + 
-        (.status // "N/A") + "," + 
-        (.consistencyLevel // "N/A") + "," + 
+        (.provisioningState // "N/A") + "," + 
+        (.consistencyPolicy.defaultConsistencyLevel // "Session") + "," + 
         "N/A," + 
-        (.backupPolicy // "N/A") + "," + 
-        (if .multiRegion then "Yes" else "No" end) + "," + 
+        (.backupPolicy.type // "Periodic") + "," + 
+        (if .enableMultipleWriteLocations then "Yes" else "No" end) + "," + 
         "N/A," + 
-        (.fqdn // "N/A") + "," + 
+        (.documentEndpoint // "N/A") + "," + 
         ((.tags | to_entries | map(.key + "=" + (.value | tostring)) | join(";")) // "N/A")
         ' | while IFS= read -r line; do
             append_to_output "$line"
