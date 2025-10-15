@@ -275,24 +275,77 @@ class GoogleSheetsServiceAccountUpdater:
                     new_resources.append(csv_row)
                     self.logger.info(f"Will add as new resource: {resource_name}")
             
-            # Append new resources at the bottom of the sheet
+            # Append new resources at the bottom of the sheet with proper formatting
             if new_resources:
                 last_row = len(existing_data) + 1
-                new_data_range = f"{sheet_name}!A{last_row}"
-                
-                self.service.spreadsheets().values().update(
-                    spreadsheetId=spreadsheet_id,
-                    range=new_data_range,
-                    valueInputOption='RAW',
-                    body={'values': new_resources}
-                ).execute()
+                formatted_new_resources = []
                 
                 for resource in new_resources:
-                    if len(resource) > csv_indices['name']:
-                        resource_name = resource[csv_indices['name']].strip()
-                        change_msg = f"Added new resource: {resource_name}"
-                        changes_made.append(change_msg)
-                        self.logger.info(change_msg)
+                    # Create a new row with the same structure as the Google Sheet
+                    new_row = [''] * len(gsheet_header)  # Initialize with empty values
+                    
+                    # Extract data from CSV row
+                    resource_type = resource[0] if len(resource) > 0 else ''
+                    resource_name = resource[csv_indices['name']] if len(resource) > csv_indices['name'] else ''
+                    resource_sku = resource[csv_indices['sku']] if len(resource) > csv_indices['sku'] else ''
+                    
+                    # Fill in the common columns
+                    if gsheet_indices['group'] is not None:
+                        new_row[gsheet_indices['group']] = resource_name
+                    if gsheet_indices['sku'] is not None:
+                        new_row[gsheet_indices['sku']] = resource_sku
+                    
+                    # Find Resource Type column index
+                    resource_type_idx = self._find_column_index(gsheet_header, ['Resource Type'], case_sensitive=False)
+                    if resource_type_idx is not None:
+                        new_row[resource_type_idx] = resource_type
+                    
+                    # If it's a VMSS, fill in the capacity columns
+                    if resource_type.upper() == 'VMSS':
+                        if (csv_indices['autoscale_current'] is not None and 
+                            len(resource) > csv_indices['autoscale_current'] and
+                            resource[csv_indices['autoscale_current']] not in ['N/A', '', 'null']):
+                            
+                            current_capacity = resource[csv_indices['autoscale_current']].strip()
+                            min_capacity = resource[csv_indices['autoscale_min']].strip() if (csv_indices['autoscale_min'] is not None and len(resource) > csv_indices['autoscale_min']) else current_capacity
+                            max_capacity = resource[csv_indices['autoscale_max']].strip() if (csv_indices['autoscale_max'] is not None and len(resource) > csv_indices['autoscale_max']) else current_capacity
+                            
+                            # Clean up N/A values
+                            if min_capacity in ['N/A', '', 'null']:
+                                min_capacity = current_capacity
+                            if max_capacity in ['N/A', '', 'null']:
+                                max_capacity = current_capacity
+                            
+                            if gsheet_indices['current'] is not None:
+                                new_row[gsheet_indices['current']] = current_capacity
+                            if gsheet_indices['min'] is not None:
+                                new_row[gsheet_indices['min']] = min_capacity
+                            if gsheet_indices['max'] is not None:
+                                new_row[gsheet_indices['max']] = max_capacity
+                    
+                    formatted_new_resources.append(new_row)
+                    
+                    # Log what we're adding
+                    resource_info = f"{resource_type}: {resource_name}"
+                    if resource_type.upper() == 'VMSS' and gsheet_indices['current'] is not None:
+                        capacity_info = new_row[gsheet_indices['current']] if new_row[gsheet_indices['current']] else 'N/A'
+                        resource_info += f" (capacity: {capacity_info})"
+                    change_msg = f"Added new resource: {resource_info}"
+                    changes_made.append(change_msg)
+                    self.logger.info(change_msg)
+                
+                # Add the formatted resources to the sheet
+                if formatted_new_resources:
+                    new_data_range = f"{sheet_name}!A{last_row}"
+                    
+                    self.service.spreadsheets().values().update(
+                        spreadsheetId=spreadsheet_id,
+                        range=new_data_range,
+                        valueInputOption='RAW',
+                        body={'values': formatted_new_resources}
+                    ).execute()
+                    
+                    self.logger.info(f"Added {len(formatted_new_resources)} new resources to the bottom of the sheet")
             
             # Summary
             self.logger.info(f"\n=== UPDATE SUMMARY ===")
