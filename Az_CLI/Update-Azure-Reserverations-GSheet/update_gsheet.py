@@ -180,6 +180,11 @@ class GoogleSheetsUpdater:
             'vms': 0,
             'vmss': 0,
             'autoscale_enabled': 0,
+            'mysql': 0,
+            'postgresql': 0,
+            'cosmosdb': 0,
+            'sqldb': 0,
+            'redis': 0,
             'subscriptions': set()
         }
         
@@ -189,12 +194,27 @@ class GoogleSheetsUpdater:
                 for row in csv_reader:
                     stats['total_resources'] += 1
                     
-                    if row.get('ResourceType') == 'VM':
+                    resource_type = row.get('ResourceType', '').upper()
+                    
+                    # Handle VM/VMSS resources (for backward compatibility)
+                    if resource_type == 'VM':
                         stats['vms'] += 1
-                    elif row.get('ResourceType') == 'VMSS':
+                    elif resource_type == 'VMSS':
                         stats['vmss'] += 1
                         if row.get('AutoscaleEnabled', '').lower() == 'true':
                             stats['autoscale_enabled'] += 1
+                    
+                    # Handle database resources
+                    elif resource_type == 'MYSQL':
+                        stats['mysql'] += 1
+                    elif resource_type == 'POSTGRESQL':
+                        stats['postgresql'] += 1
+                    elif resource_type == 'COSMOSDB':
+                        stats['cosmosdb'] += 1
+                    elif resource_type == 'SQLDB':
+                        stats['sqldb'] += 1
+                    elif resource_type == 'REDIS':
+                        stats['redis'] += 1
                     
                     if row.get('Subscription'):
                         stats['subscriptions'].add(row['Subscription'])
@@ -260,9 +280,23 @@ def main():
         stats = updater.create_summary_stats(args.csv_file)
         print("\n=== Update Summary ===")
         print(f"Total Resources: {stats['total_resources']}")
-        print(f"VMs: {stats['vms']}")
-        print(f"VMSS: {stats['vmss']}")
-        print(f"VMSS with Autoscale: {stats['autoscale_enabled']}")
+        
+        # Show database statistics if any database resources are found
+        db_total = stats['mysql'] + stats['postgresql'] + stats['cosmosdb'] + stats['sqldb'] + stats['redis']
+        if db_total > 0:
+            print(f"MySQL: {stats['mysql']}")
+            print(f"PostgreSQL: {stats['postgresql']}")
+            print(f"Cosmos DB: {stats['cosmosdb']}")
+            print(f"SQL Database: {stats['sqldb']}")
+            print(f"Redis: {stats['redis']}")
+        
+        # Show VM statistics if any VM resources are found (for backward compatibility)
+        vm_total = stats['vms'] + stats['vmss']
+        if vm_total > 0:
+            print(f"VMs: {stats['vms']}")
+            print(f"VMSS: {stats['vmss']}")
+            print(f"VMSS with Autoscale: {stats['autoscale_enabled']}")
+        
         print(f"Subscriptions: {stats['subscriptions']}")
         print(f"Google Sheet updated successfully!")
         
