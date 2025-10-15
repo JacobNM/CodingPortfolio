@@ -209,7 +209,7 @@ class GoogleSheetsUpdater:
                         stats['mysql'] += 1
                     elif resource_type == 'POSTGRESQL':
                         stats['postgresql'] += 1
-                    elif resource_type == 'COSMOSDB':
+                    elif resource_type == 'COSMOSDB' or resource_type.startswith('COSMOSDB-'):
                         stats['cosmosdb'] += 1
                     elif resource_type == 'SQLDB':
                         stats['sqldb'] += 1
