@@ -148,6 +148,10 @@ class GoogleSheetsServiceAccountUpdater:
             csv_indices = {
                 'name': self._find_column_index(csv_header, ['Name']),
                 'sku': self._find_column_index(csv_header, ['SKU']),
+                'subscription': self._find_column_index(csv_header, ['Subscription']),
+                'resource_group': self._find_column_index(csv_header, ['ResourceGroup']),
+                'location': self._find_column_index(csv_header, ['Location']),
+                'resource_type': self._find_column_index(csv_header, ['ResourceType']),
                 'autoscale_min': self._find_column_index(csv_header, ['AutoscaleMinCapacity']),
                 'autoscale_max': self._find_column_index(csv_header, ['AutoscaleMaxCapacity']),
                 'autoscale_current': self._find_column_index(csv_header, ['AutoscaleDefaultCapacity'])
@@ -157,6 +161,7 @@ class GoogleSheetsServiceAccountUpdater:
             gsheet_indices = {
                 'group': self._find_column_index(gsheet_header, ['Group'], case_sensitive=False),
                 'sku': self._find_column_index(gsheet_header, ['SKU'], case_sensitive=False),
+                'subscription': self._find_column_index(gsheet_header, ['Subscription'], case_sensitive=False),
                 'current': self._find_column_index(gsheet_header, ['current'], case_sensitive=False),
                 'min': self._find_column_index(gsheet_header, ['min'], case_sensitive=False),
                 'max': self._find_column_index(gsheet_header, ['max'], case_sensitive=False)
@@ -225,6 +230,22 @@ class GoogleSheetsServiceAccountUpdater:
                                 'old_value': gsheet_sku
                             })
                     
+                    # Check Subscription
+                    if (csv_indices['subscription'] is not None and 
+                        gsheet_indices['subscription'] is not None and 
+                        len(csv_row) > csv_indices['subscription']):
+                        
+                        csv_subscription = csv_row[csv_indices['subscription']].strip()
+                        gsheet_subscription = gsheet_row[gsheet_indices['subscription']].strip() if len(gsheet_row) > gsheet_indices['subscription'] else ""
+                        
+                        if csv_subscription and (not gsheet_subscription or csv_subscription != gsheet_subscription):
+                            updates_needed.append({
+                                'column': gsheet_indices['subscription'],
+                                'value': csv_subscription,
+                                'field': 'Subscription',
+                                'old_value': gsheet_subscription
+                            })
+                    
                     # Check autoscale values
                     autoscale_mappings = [
                         ('autoscale_current', 'current', 'Current Capacity'),
@@ -288,12 +309,15 @@ class GoogleSheetsServiceAccountUpdater:
                     resource_type = resource[0] if len(resource) > 0 else ''
                     resource_name = resource[csv_indices['name']] if len(resource) > csv_indices['name'] else ''
                     resource_sku = resource[csv_indices['sku']] if len(resource) > csv_indices['sku'] else ''
+                    resource_subscription = resource[csv_indices['subscription']] if (csv_indices['subscription'] is not None and len(resource) > csv_indices['subscription']) else ''
                     
                     # Fill in the common columns
                     if gsheet_indices['group'] is not None:
                         new_row[gsheet_indices['group']] = resource_name
                     if gsheet_indices['sku'] is not None:
                         new_row[gsheet_indices['sku']] = resource_sku
+                    if gsheet_indices['subscription'] is not None:
+                        new_row[gsheet_indices['subscription']] = resource_subscription
                     
                     # Find Resource Type column index
                     resource_type_idx = self._find_column_index(gsheet_header, ['Resource Type'], case_sensitive=False)
