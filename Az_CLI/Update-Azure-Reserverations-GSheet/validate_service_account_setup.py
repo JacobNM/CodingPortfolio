@@ -99,7 +99,7 @@ def main():
         print("🎉 VALIDATION SUCCESSFUL!")
         print("   Your service account setup is ready to use.")
         print("\n💡 Usage example:")
-        print('   ./update_gsheet_with_azure_vm_vmss_inventory.sh -g "YOUR_SPREADSHEET_ID"')
+        print('   ./update_gsheet_azure_vm_vmss_inventory.sh -g "YOUR_SPREADSHEET_ID"')
     else:
         print("⚠️  VALIDATION FAILED!")
         print("   Please fix the issues above before proceeding.")
