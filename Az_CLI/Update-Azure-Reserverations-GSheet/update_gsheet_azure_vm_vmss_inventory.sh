@@ -524,6 +524,11 @@ show_help() {
     echo "  - Maximum capacity"
     echo "  - Default capacity"
     echo
+    echo "NEW: Orphaned Resource Detection"
+    echo "The script now detects resources in your Google Sheet that no longer exist"
+    echo "in Azure and offers to delete them automatically. This helps keep your"
+    echo "inventory clean and up-to-date."
+    echo
     echo "Options:"
     echo "  -h, --help              Show this help message"
     echo "  -f, --file FILENAME     Specify output CSV filename"
@@ -546,6 +551,12 @@ show_help() {
     echo "  2. Download service-account-key.json from Google Cloud Console"
     echo "  3. Share your Google Sheet with the service account email"
     echo "  4. Run: ./validate_setup.py to test your setup"
+    echo
+    echo "Features:"
+    echo "  • Updates existing resources with current Azure data"
+    echo "  • Adds new resources found in Azure"
+    echo "  • Detects and optionally removes orphaned resources"
+    echo "  • Compares 'Group' column (GSheet) with 'Name' column (CSV)"
     echo
     echo "CSV Columns:"
     echo "  ResourceType, Name, ResourceGroup, Subscription, Location,"
