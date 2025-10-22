@@ -162,6 +162,7 @@ class GoogleSheetsServiceAccountUpdater:
                 'group': self._find_column_index(gsheet_header, ['Group'], case_sensitive=False),
                 'sku': self._find_column_index(gsheet_header, ['SKU'], case_sensitive=False),
                 'subscription': self._find_column_index(gsheet_header, ['Subscription'], case_sensitive=False),
+                'resource_type': self._find_column_index(gsheet_header, ['Resource Type', 'ResourceType', 'Type'], case_sensitive=False),
                 'current': self._find_column_index(gsheet_header, ['current'], case_sensitive=False),
                 'min': self._find_column_index(gsheet_header, ['min'], case_sensitive=False),
                 'max': self._find_column_index(gsheet_header, ['max'], case_sensitive=False)
@@ -246,6 +247,22 @@ class GoogleSheetsServiceAccountUpdater:
                                 'old_value': gsheet_subscription
                             })
                     
+                    # Check Resource Type
+                    if (csv_indices['resource_type'] is not None and 
+                        gsheet_indices['resource_type'] is not None and 
+                        len(csv_row) > csv_indices['resource_type']):
+                        
+                        csv_resource_type = csv_row[csv_indices['resource_type']].strip()
+                        gsheet_resource_type = gsheet_row[gsheet_indices['resource_type']].strip() if len(gsheet_row) > gsheet_indices['resource_type'] else ""
+                        
+                        if csv_resource_type and (not gsheet_resource_type or csv_resource_type != gsheet_resource_type):
+                            updates_needed.append({
+                                'column': gsheet_indices['resource_type'],
+                                'value': csv_resource_type,
+                                'field': 'Resource Type',
+                                'old_value': gsheet_resource_type
+                            })
+                    
                     # Check autoscale values
                     autoscale_mappings = [
                         ('autoscale_current', 'current', 'Current Capacity'),
@@ -319,10 +336,9 @@ class GoogleSheetsServiceAccountUpdater:
                     if gsheet_indices['subscription'] is not None:
                         new_row[gsheet_indices['subscription']] = resource_subscription
                     
-                    # Find Resource Type column index
-                    resource_type_idx = self._find_column_index(gsheet_header, ['Resource Type'], case_sensitive=False)
-                    if resource_type_idx is not None:
-                        new_row[resource_type_idx] = resource_type
+                    # Set Resource Type using the mapped index
+                    if gsheet_indices['resource_type'] is not None:
+                        new_row[gsheet_indices['resource_type']] = resource_type
                     
                     # If it's a VMSS, fill in the capacity columns
                     if resource_type.upper() == 'VMSS':
