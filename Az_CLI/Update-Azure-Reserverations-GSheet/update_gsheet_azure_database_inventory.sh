@@ -410,21 +410,35 @@ get_redis_data() {
         name,
         resourceGroup,
         location,
-        sku = sku.name,
+        skuName = properties.sku.name,
+        skuFamily = properties.sku.family,
+        skuCapacity = properties.sku.capacity,
         status = properties.provisioningState,
         version = properties.redisVersion,
         port = properties.port,
         sslPort = properties.sslPort,
         hostName = properties.hostName,
+        enableNonSslPort = properties.enableNonSslPort,
+        minimumTlsVersion = properties.minimumTlsVersion,
+        publicNetworkAccess = properties.publicNetworkAccess,
         tags,
         subscriptionId
     '
     
     # Execute query and process results
     local redis_data
-    redis_data=$(az graph query -q "$redis_query" --subscriptions "$subscription_id" --output json 2>/dev/null || echo "[]")
+    redis_data=$(az graph query -q "$redis_query" --subscriptions "$subscription_id" --output json 2>&1)
     
-    if [[ "$redis_data" != "[]" ]] && [[ -n "$redis_data" ]]; then
+    # Debug output
+    if [[ "$OUTPUT_MODE" == "csv" ]] || [[ "$SHOW_STATUS" == "true" ]]; then
+        if [[ "$redis_data" == "[]" ]] || [[ -z "$redis_data" ]]; then
+            print_status "No Redis Cache resources found in subscription: $subscription_name"
+        else
+            print_status "Found Redis Cache data for subscription: $subscription_name"
+        fi
+    fi
+    
+    if [[ "$redis_data" != "[]" ]] && [[ -n "$redis_data" ]] && [[ "$redis_data" != *"error"* ]] && [[ "$redis_data" != *"Error"* ]]; then
         echo "$redis_data" | jq -r --arg sub_name "$subscription_name" '
         .data[] | 
         "Redis," + 
@@ -432,13 +446,29 @@ get_redis_data() {
         .resourceGroup + "," + 
         $sub_name + "," + 
         .location + "," + 
-        (.sku // "N/A") + "," + 
+        ((.skuName // "Unknown") + "_" + (.skuFamily // "C") + "_" + (.skuCapacity | tostring // "0")) + "," + 
         (.status // "N/A") + "," + 
         (.version // "N/A") + "," + 
+        (if .skuName == "Basic" or .skuName == "Standard" then 
+            (if .skuCapacity == 0 then "250MB" 
+             elif .skuCapacity == 1 then "1GB" 
+             elif .skuCapacity == 2 then "2.5GB" 
+             elif .skuCapacity == 3 then "6GB" 
+             elif .skuCapacity == 4 then "13GB" 
+             elif .skuCapacity == 5 then "26GB" 
+             elif .skuCapacity == 6 then "53GB" 
+             else (.skuCapacity | tostring) + "GB" end)
+         elif .skuName == "Premium" then
+            (if .skuCapacity == 1 then "6GB" 
+             elif .skuCapacity == 2 then "13GB" 
+             elif .skuCapacity == 3 then "26GB" 
+             elif .skuCapacity == 4 then "53GB" 
+             elif .skuCapacity == 5 then "120GB" 
+             else (.skuCapacity | tostring) + "GB" end)
+         else (.skuCapacity | tostring) + "GB" end) + "," + 
         "N/A," + 
-        "N/A," + 
-        "N/A," + 
-        "N/A," + 
+        (if .enableNonSslPort == true then "SSL+NonSSL" else "SSL-Only" end) + "," + 
+        "Primary," + 
         (.hostName // "N/A") + "," + 
         ((.tags | to_entries | map(.key + "=" + (.value | tostring)) | join(";")) // "N/A")
         ' | while IFS= read -r line; do
@@ -670,6 +700,11 @@ show_help() {
     echo "  - Azure SQL Database"
     echo "  - Redis Cache"
     echo
+    echo "NEW: Orphaned Resource Detection"
+    echo "The script now detects database resources in your Google Sheet that no longer"
+    echo "exist in Azure and offers to delete them automatically. This helps keep your"
+    echo "database inventory clean and up-to-date."
+    echo
     echo "Options:"
     echo "  -h, --help              Show this help message"
     echo "  -f, --file FILENAME     Specify output CSV filename"
@@ -692,6 +727,13 @@ show_help() {
     echo "  2. Download service-account-key.json from Google Cloud Console"
     echo "  3. Share your Google Sheet with the service account email"
     echo "  4. Run: ./validate_setup.py to test your setup"
+    echo
+    echo "Features:"
+    echo "  • Updates existing database resources with current Azure data (SKU, Subscription, Resource Type)"
+    echo "  • Adds new database resources found in Azure"
+    echo "  • Detects and optionally removes orphaned database resources"
+    echo "  • Compares 'Group' column (GSheet) with 'Name' column (CSV)"
+    echo "  • Syncs Resource Type column with CSV ResourceType data"
     echo
     echo "CSV Columns:"
     echo "  ResourceType, Name, ResourceGroup, Subscription, Location,"
