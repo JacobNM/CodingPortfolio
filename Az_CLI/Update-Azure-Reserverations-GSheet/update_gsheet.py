@@ -2,6 +2,10 @@
 """
 Google Sheets Updater for Azure VM and VMSS Inventory
 This script updates a Google Sheet with Azure VM and VMSS data including autoscaling configurations.
+
+NOTE: This OAuth version provides basic functionality (clear and replace all data).
+For advanced features like orphaned resource detection and selective updates,
+use update_gsheet_service_account.py instead. See QUICK_SETUP.md for setup.
 """
 
 import os
