@@ -371,11 +371,143 @@ class GoogleSheetsServiceAccountUpdater:
                     
                     self.logger.info(f"Added {len(formatted_new_resources)} new resources to the bottom of the sheet")
             
+            # Check for resources in Google Sheet that are NOT in CSV (potential deletions)
+            orphaned_resources = []
+            csv_resource_names = set()
+            
+            # Collect all resource names from CSV (skip header)
+            for csv_row in csv_data[1:]:
+                if len(csv_row) > csv_indices['name']:
+                    resource_name = csv_row[csv_indices['name']].strip()
+                    if resource_name:
+                        csv_resource_names.add(resource_name.lower())
+            
+            # Check Google Sheet resources against CSV
+            for idx, gsheet_row in enumerate(existing_data[1:], start=2):
+                if len(gsheet_row) > gsheet_indices['group']:
+                    gsheet_group = gsheet_row[gsheet_indices['group']].strip()
+                    if gsheet_group:
+                        # Check if this resource exists in CSV
+                        if gsheet_group.lower() not in csv_resource_names:
+                            orphaned_resources.append({
+                                'row_index': idx,
+                                'name': gsheet_group,
+                                'data': gsheet_row
+                            })
+            
+            # Handle orphaned resources (prompt for deletion)
+            deleted_resources = []
+            if orphaned_resources:
+                self.logger.warning(f"\nFound {len(orphaned_resources)} resources in Google Sheet that are NOT in Azure CSV:")
+                for resource in orphaned_resources:
+                    # Show resource details
+                    resource_type_idx = self._find_column_index(gsheet_header, ['Resource Type'], case_sensitive=False)
+                    resource_type = resource['data'][resource_type_idx] if (resource_type_idx is not None and len(resource['data']) > resource_type_idx) else "Unknown"
+                    self.logger.warning(f"  • {resource['name']} ({resource_type})")
+                
+                # Ask user if they want to delete these resources
+                print("\n" + "="*60)
+                print("ORPHANED RESOURCES DETECTED")
+                print("="*60)
+                print(f"Found {len(orphaned_resources)} resources in your Google Sheet that no longer exist in Azure:")
+                print()
+                
+                for i, resource in enumerate(orphaned_resources, 1):
+                    resource_type_idx = self._find_column_index(gsheet_header, ['Resource Type'], case_sensitive=False)
+                    resource_type = resource['data'][resource_type_idx] if (resource_type_idx is not None and len(resource['data']) > resource_type_idx) else "Unknown"
+                    
+                    subscription_idx = gsheet_indices['subscription']
+                    subscription = resource['data'][subscription_idx] if (subscription_idx is not None and len(resource['data']) > subscription_idx) else "Unknown"
+                    
+                    print(f"{i:2d}. Name: {resource['name']}")
+                    print(f"     Type: {resource_type}")
+                    print(f"     Subscription: {subscription}")
+                    print()
+                
+                print("These resources are no longer found in your Azure environment.")
+                print("This could mean they were:")
+                print("  - Deleted from Azure")
+                print("  - Moved to a different subscription")
+                print("  - Renamed")
+                print("  - Access was revoked")
+                print()
+                
+                while True:
+                    try:
+                        user_choice = input("Do you want to DELETE these rows from the Google Sheet? (y/n/list): ").lower().strip()
+                    except (EOFError, KeyboardInterrupt):
+                        print("\nOperation cancelled by user.")
+                        user_choice = 'n'
+                    
+                    if user_choice in ['y', 'yes']:
+                        # Delete orphaned resources (delete from bottom to top to maintain indices)
+                        orphaned_resources.sort(key=lambda x: x['row_index'], reverse=True)
+                        
+                        for resource in orphaned_resources:
+                            try:
+                                # Get the actual sheet ID
+                                sheet_id = None
+                                for sheet in sheet_metadata.get('sheets', []):
+                                    if sheet['properties']['title'] == sheet_name:
+                                        sheet_id = sheet['properties']['sheetId']
+                                        break
+                                
+                                if sheet_id is not None:
+                                    # Delete the entire row using batchUpdate
+                                    request_body = {
+                                        'requests': [{
+                                            'deleteDimension': {
+                                                'range': {
+                                                    'sheetId': sheet_id,
+                                                    'dimension': 'ROWS',
+                                                    'startIndex': resource['row_index'] - 1,  # 0-based index
+                                                    'endIndex': resource['row_index']
+                                                }
+                                            }
+                                        }]
+                                    }
+                                    
+                                    self.service.spreadsheets().batchUpdate(
+                                        spreadsheetId=spreadsheet_id,
+                                        body=request_body
+                                    ).execute()
+                                    
+                                    deleted_resources.append(resource['name'])
+                                    self.logger.info(f"Deleted orphaned resource: {resource['name']}")
+                                else:
+                                    self.logger.error(f"Could not find sheet ID for '{sheet_name}'")
+                                    
+                            except Exception as e:
+                                self.logger.error(f"Failed to delete resource {resource['name']}: {e}")
+                        
+                        if deleted_resources:
+                            print(f"\n✓ Successfully deleted {len(deleted_resources)} orphaned resources from Google Sheet")
+                            changes_made.extend([f"Deleted orphaned resource: {name}" for name in deleted_resources])
+                        break
+                        
+                    elif user_choice in ['n', 'no']:
+                        print("\n↪ Skipping deletion of orphaned resources")
+                        break
+                        
+                    elif user_choice in ['list', 'l']:
+                        print("\nDetailed list of orphaned resources:")
+                        print("-" * 60)
+                        for i, resource in enumerate(orphaned_resources, 1):
+                            print(f"{i}. {resource['name']}")
+                            if len(resource['data']) > 1:
+                                print(f"   Row data: {resource['data'][:5]}...")  # Show first 5 columns
+                            print()
+                        continue
+                        
+                    else:
+                        print("Please enter 'y' for yes, 'n' for no, or 'list' to see details")
+
             # Summary
             self.logger.info(f"\n=== UPDATE SUMMARY ===")
             self.logger.info(f"Total changes made: {len(changes_made)}")
-            self.logger.info(f"Resources updated: {len(changes_made) - len(new_resources)}")
+            self.logger.info(f"Resources updated: {len(changes_made) - len(new_resources) - len(deleted_resources)}")
             self.logger.info(f"New resources added: {len(new_resources)}")
+            self.logger.info(f"Orphaned resources deleted: {len(deleted_resources)}")
             
             if changes_made:
                 self.logger.info("\nDetailed changes:")
