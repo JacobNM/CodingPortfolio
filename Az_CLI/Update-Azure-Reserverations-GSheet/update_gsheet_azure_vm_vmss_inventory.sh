@@ -553,10 +553,11 @@ show_help() {
     echo "  4. Run: ./validate_setup.py to test your setup"
     echo
     echo "Features:"
-    echo "  • Updates existing resources with current Azure data"
+    echo "  • Updates existing resources with current Azure data (SKU, Subscription, Resource Type)"
     echo "  • Adds new resources found in Azure"
     echo "  • Detects and optionally removes orphaned resources"
     echo "  • Compares 'Group' column (GSheet) with 'Name' column (CSV)"
+    echo "  • Syncs Resource Type column with CSV ResourceType data"
     echo
     echo "CSV Columns:"
     echo "  ResourceType, Name, ResourceGroup, Subscription, Location,"
