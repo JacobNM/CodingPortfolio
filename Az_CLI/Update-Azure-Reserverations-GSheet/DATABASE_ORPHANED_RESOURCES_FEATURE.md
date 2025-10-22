@@ -7,8 +7,9 @@ The Azure Database Inventory Script now includes **orphaned resource detection**
 ## Supported Database Types
 
 The orphaned resource detection works with all supported database types:
+
 - **MySQL Flexible Server**
-- **PostgreSQL Flexible Server** 
+- **PostgreSQL Flexible Server**
 - **Cosmos DB**
 - **Azure SQL Database**
 - **Redis Cache**
@@ -16,11 +17,13 @@ The orphaned resource detection works with all supported database types:
 ## How It Works for Databases
 
 ### Resource Matching
+
 - **CSV (Azure Data)**: Uses the `Name` column to identify database resources
 - **Google Sheet**: Uses the `Group` column to identify database resources  
 - **Comparison**: Case-insensitive exact matching between these columns
 
 ### Detection Process
+
 When the database script runs with Google Sheets integration, it:
 
 1. **Collects** all database resource names from the current Azure CSV export
@@ -29,6 +32,7 @@ When the database script runs with Google Sheets integration, it:
 4. **Reports** these as "orphaned database resources"
 
 ### Interactive Database Cleanup
+
 When orphaned database resources are found, the script:
 
 1. **Lists** all orphaned databases with details (name, type, subscription, SKU, status)
@@ -39,6 +43,7 @@ When orphaned database resources are found, the script:
 ## Example Database Scenarios
 
 ### Scenario 1: Database Migration
+
 ```
 ORPHANED RESOURCES DETECTED
 ============================================================
@@ -65,21 +70,25 @@ Do you want to DELETE these rows from the Google Sheet? (y/n/list):
 ### Common Database Use Cases
 
 #### 🗃️ **MySQL/PostgreSQL Flexible Server Cleanup**
+
 - Detect old single-server instances after migration to flexible server
 - Clean up development/testing databases that were deleted
 - Remove databases from decommissioned projects
 
 #### 🌐 **Cosmos DB Management**  
+
 - Track Cosmos DB accounts that were consolidated
 - Remove databases that were migrated to other accounts
 - Clean up development Cosmos DB instances
 
 #### 💾 **Redis Cache Monitoring**
+
 - Detect Redis instances that were scaled down or removed
 - Track caches that were migrated to different tiers
 - Remove development Redis instances
 
 #### 🗄️ **Azure SQL Database Tracking**
+
 - Clean up databases that were migrated to Managed Instance
 - Remove development/test databases
 - Track databases moved between resource groups
@@ -87,21 +96,25 @@ Do you want to DELETE these rows from the Google Sheet? (y/n/list):
 ## Database-Specific Benefits
 
 ### 💰 **Cost Management**
+
 - Accurate cost reporting by removing stale database entries
 - Better budget planning with current database inventory
 - Identify cost savings opportunities from removed resources
 
 ### 🔐 **Security Compliance**  
+
 - Maintain accurate access control records
 - Track database security configurations
 - Ensure compliance documentation is current
 
 ### 📊 **Capacity Planning**
+
 - Accurate storage and compute capacity tracking
 - Better performance monitoring with current data
 - Improved scaling decisions based on actual usage
 
 ### 🔄 **Backup & Recovery Planning**
+
 - Current backup policy tracking
 - Accurate disaster recovery planning
 - Remove obsolete backup configurations
@@ -118,23 +131,27 @@ CosmosDB,analytics-cosmos,analytics,Vantage-Prod,canadacentral,Standard,Ready,N/
 ```
 
 ### Key Identification Column
+
 - **`Name`**: The database resource name used for matching with Google Sheet `Group` column
 
 ## Usage Examples
 
 ### Basic Usage with Database Detection
+
 ```bash
 # Run database inventory with orphaned resource detection
 ./update_gsheet_azure_database_inventory.sh -g YOUR_SHEET_ID -s "Database Inventory"
 ```
 
 ### Batch Processing
+
 ```bash
 # Process multiple database subscriptions and clean up automatically
 ./update_gsheet_azure_database_inventory.sh -g YOUR_SHEET_ID --verbose
 ```
 
 ### Safe Dry Run
+
 ```bash
 # Generate CSV first, then manually review before updating Google Sheet
 ./update_gsheet_azure_database_inventory.sh -f database_review.csv
@@ -145,17 +162,20 @@ CosmosDB,analytics-cosmos,analytics,Vantage-Prod,canadacentral,Standard,Ready,N/
 ## Safety Features for Databases
 
 ### 🛡️ **Database-Safe Operations**
+
 - **Connection String Protection**: Never deletes rows with active connection strings
 - **Production Database Warnings**: Extra prompts for production-tagged resources
 - **Backup Validation**: Checks backup retention settings before suggesting deletion
 - **Dependency Checking**: Warns about databases with replication relationships
 
 ### 📝 **Audit Trail**
+
 - All database deletion actions are logged with timestamps
 - Includes database type, SKU, and subscription information
 - Tracks which databases were removed and why
 
 ### ⚡ **Performance Considerations**
+
 - Efficient batch processing for large database inventories
 - Minimal API calls to avoid rate limiting
 - Optimized for environments with many database resources
@@ -163,11 +183,13 @@ CosmosDB,analytics-cosmos,analytics,Vantage-Prod,canadacentral,Standard,Ready,N/
 ## Integration Notes
 
 ### Works with Existing Workflows
+
 - Compatible with existing database monitoring processes
 - Integrates with backup and recovery procedures  
 - Supports existing tagging and categorization schemes
 
 ### Multi-Subscription Support
+
 - Processes databases across all accessible subscriptions
 - Maintains subscription-level tracking in Google Sheets
 - Handles cross-subscription database migrations
@@ -175,19 +197,25 @@ CosmosDB,analytics-cosmos,analytics,Vantage-Prod,canadacentral,Standard,Ready,N/
 ## Troubleshooting Database-Specific Issues
 
 ### Connection String Mismatches
+
 If connection strings don't match between Azure and Google Sheets:
+
 - Check for DNS name changes
 - Verify SSL certificate updates
 - Confirm connection string format consistency
 
 ### Database Version Tracking
+
 For version-related orphan detection issues:
+
 - Ensure version numbers are consistently formatted
 - Check for automatic version updates in Azure
 - Verify version tracking in your Google Sheet
 
 ### Flexible Server Migration
+
 When migrating from single server to flexible server:
+
 - Expect old single-server entries to appear as orphaned
 - Confirm migration completion before deleting old entries
 - Maintain backup of old configuration data
