@@ -501,6 +501,23 @@ collect_data() {
         init_output
     fi
     
+    # Ensure CSV header is always present when OUTPUT_MODE is csv
+    if [[ "$OUTPUT_MODE" == "csv" ]] && [[ -n "$OUTPUT_FILE" ]]; then
+        # Check if the file exists and has content
+        if [[ ! -f "$OUTPUT_FILE" ]] || [[ ! -s "$OUTPUT_FILE" ]]; then
+            # File doesn't exist or is empty, create it with headers
+            echo "ResourceType,Name,ResourceGroup,Subscription,Location,SKU,Status,Version,Storage,Backup,HighAvailability,Replication,ConnectionString,Tags" > "$OUTPUT_FILE"
+            print_success "Created CSV file with headers: $OUTPUT_FILE"
+        elif ! head -1 "$OUTPUT_FILE" | grep -q "ResourceType,Name,ResourceGroup"; then
+            # File exists but doesn't have proper headers, add them
+            local temp_file=$(mktemp)
+            echo "ResourceType,Name,ResourceGroup,Subscription,Location,SKU,Status,Version,Storage,Backup,HighAvailability,Replication,ConnectionString,Tags" > "$temp_file"
+            cat "$OUTPUT_FILE" >> "$temp_file"
+            mv "$temp_file" "$OUTPUT_FILE"
+            print_success "Added CSV headers to existing file: $OUTPUT_FILE"
+        fi
+    fi
+    
     # Show progress indicator for console mode without verbose
     if [[ "$OUTPUT_MODE" == "console" ]] && [[ "$SHOW_STATUS" != "true" ]]; then
         echo -n "Collecting data"
