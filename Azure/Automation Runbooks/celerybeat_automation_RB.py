@@ -4,17 +4,23 @@ import sys
 import urllib.request
 import urllib.parse
 import urllib.error
+import automationassets
 from datetime import datetime
 
 # Azure metadata constants
 METADATA_URL = "http://169.254.169.254/metadata/identity/oauth2/token"
 RESOURCE = "https://management.azure.com/"
 
-# === CONFIG: EDIT THESE ===
-SUBSCRIPTION_ID = "<YOUR_SUBSCRIPTION_ID>"
-RESOURCE_GROUP = "<YOUR_RESOURCE_GROUP>"
-VM_NAME = "<YOUR_VM_NAME>"
-SRE_Prod_Alert_Slack = "<YOUR_SLACK_WEBHOOK_URL>"
+# === CONFIG: GET FROM AUTOMATION VARIABLES ===
+try:
+    SUBSCRIPTION_ID = automationassets.get_automation_variable("<subscription_id_var_name>")  # e.g., "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    RESOURCE_GROUP = automationassets.get_automation_variable("<resource_group_var_name>")  # e.g., "vantage-app-prod-rg"
+    VM_NAME = automationassets.get_automation_variable("<vm_name_var_name>")  # e.g., "vantage-app-prod-vm"
+    SRE_Prod_Alert_Slack = automationassets.get_automation_variable("<sre_infra_alert_channel_webhook_var_name>")  # e.g., "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+except Exception as e:
+    print(f"Failed to get automation variables: {e}")
+    print("Make sure all required variables are configured in Assets > Variables")
+    sys.exit(1)
 
 # Command to run on the VM (runs as root already)
 COMMAND_TO_RUN = "supervisorctl status celerybeat-vantage"  # For testing
