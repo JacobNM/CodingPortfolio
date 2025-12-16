@@ -1,6 +1,6 @@
 // SRE Deadline Tracker - Google Apps Script
 // Configuration - Update these values
-const CALENDAR_NAME = '<Your Calendar Name>'; // Change to your desired calendar name
+const CALENDAR_NAME = '<Your Calendar Name>'; // e.g., 'SRE Deadlines'
 const SHEET_NAME = '<Your Sheet Name>'; // Change if your sheet has a different name
 
 function syncDeadlinesToCalendar() {
@@ -170,13 +170,15 @@ ${needsManualAction ? '\n⚠️  MANUAL ACTION REQUIRED - This will not auto-ren
   if (existingEvents.has(eventKey)) {
     const existingEvent = existingEvents.get(eventKey);
     
-    // Update description if it has changed (preserves manual edits to other fields)
-    if (existingEvent.getDescription() !== description) {
-      existingEvent.setDescription(description);
-      Logger.log('Updated existing event: ' + title);
-      Logger.log('Event description set to: ' + description.substring(0, 200) + '...');
+    // Smart sync: preserve manual additions while updating generated content
+    const currentDescription = existingEvent.getDescription();
+    const finalDescription = preserveManualAdditions(currentDescription, description);
+    
+    if (currentDescription !== finalDescription) {
+      existingEvent.setDescription(finalDescription);
+      Logger.log('Updated existing event with preserved manual additions: ' + title);
     } else {
-      Logger.log('Skipped existing event: ' + title);
+      Logger.log('No changes needed for existing event: ' + title);
     }
     
     // Remove from map so we know it's been processed
@@ -193,6 +195,50 @@ ${needsManualAction ? '\n⚠️  MANUAL ACTION REQUIRED - This will not auto-ren
     Logger.log('Created new event: ' + title);
     Logger.log('Event description set to: ' + description.substring(0, 200) + '...');
   }
+}
+
+// Helper function to preserve manual additions while updating generated content
+function preserveManualAdditions(currentDescription, newGeneratedDescription) {
+  if (!currentDescription) {
+    return newGeneratedDescription;
+  }
+  
+  // Look for the end of our generated content - it ends with either:
+  // "This is an automated reminder from the SRE Deadlines tracker." or
+  // "⚠️  MANUAL ACTION REQUIRED - This will not auto-renew!"
+  const generatedEndMarkers = [
+    '⚠️  MANUAL ACTION REQUIRED - This will not auto-renew!',
+    'This is an automated reminder from the SRE Deadlines tracker.'
+  ];
+  
+  let generatedEndIndex = -1;
+  
+  for (const marker of generatedEndMarkers) {
+    const markerIndex = currentDescription.indexOf(marker);
+    if (markerIndex !== -1) {
+      // Find the end of this line
+      generatedEndIndex = markerIndex + marker.length;
+      break;
+    }
+  }
+  
+  // If we found the end of generated content, extract any manual additions after it
+  let manualAdditions = '';
+  if (generatedEndIndex > -1 && generatedEndIndex < currentDescription.length) {
+    manualAdditions = currentDescription.substring(generatedEndIndex);
+    
+    // Clean up: remove leading whitespace but preserve intentional formatting
+    manualAdditions = manualAdditions.replace(/^\s*\n/, '\n\n--- Manual Notes ---\n');
+    
+    // Only keep manual additions if they contain meaningful content
+    if (manualAdditions.trim().length > '--- Manual Notes ---'.length) {
+      Logger.log('Preserving manual additions: ' + manualAdditions.trim().substring(0, 100) + '...');
+      return newGeneratedDescription + manualAdditions;
+    }
+  }
+  
+  // No manual additions found, return just the new generated content
+  return newGeneratedDescription;
 }
 
 // Helper function to extract URLs from Google Sheets hyperlinks
