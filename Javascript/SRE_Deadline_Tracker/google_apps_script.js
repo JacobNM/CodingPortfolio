@@ -11,11 +11,12 @@ function syncDeadlinesToCalendar() {
     // First update all statuses based on expiry dates
     updateStatusColumn(sheet);
     
-    // Get data from sheet (skip header row) - now 9 columns
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
+    // Get data from sheet (skip header row) - now 10 columns
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
     
-    // Get rich text data to extract hyperlinks from the notes column
-    const richTextData = sheet.getRange(2, 8, sheet.getLastRow() - 1, 1).getRichTextValues();
+    // Get rich text data to extract hyperlinks from the notes column (column 8) and links column (column 10)
+    const notesRichTextData = sheet.getRange(2, 8, sheet.getLastRow() - 1, 1).getRichTextValues();
+    const linksRichTextData = sheet.getRange(2, 10, sheet.getLastRow() - 1, 1).getRichTextValues();
     
     // Get existing events to avoid duplicates
     const existingEvents = getExistingDeadlineEvents(calendar);
@@ -23,12 +24,9 @@ function syncDeadlinesToCalendar() {
     // Create or update calendar events
     data.forEach((row, index) => {
       if (row[0] && row[2]) { // Check if item name and expiry date exist
-        // Extract hyperlinks from the notes column (column H, index 7)
-        const notesWithLinks = extractLinksFromRichText(richTextData[index][0], row[7]);
-        const enhancedRow = [...row];
-        enhancedRow[7] = notesWithLinks; // Replace notes with version that includes extracted URLs
-        
-        createOrUpdateDeadlineEvent(calendar, enhancedRow, existingEvents);
+        const notesRichTextValue = notesRichTextData[index] ? notesRichTextData[index][0] : null;
+        const linksRichTextValue = linksRichTextData[index] ? linksRichTextData[index][0] : null;
+        createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTextValue, linksRichTextValue);
       }
     });
     
@@ -66,7 +64,7 @@ function updateStatusColumn(sheet) {
     return;
   }
   
-  const data = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
   const now = new Date();
   const statusUpdates = [];
   
@@ -134,8 +132,8 @@ function calculateStatus(expiryDate, needsManualAction, autoRenews, now) {
   return 'Active';
 }
 
-function createOrUpdateDeadlineEvent(calendar, row, existingEvents) {
-  const [itemName, type, expiryDate, owner, status, needsManualAction, autoRenews, renewalActionNotes, priority] = row;
+function createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTextValue = null, linksRichTextValue = null) {
+  const [itemName, type, expiryDate, owner, status, needsManualAction, autoRenews, renewalActionNotes, priority, links] = row;
   
   if (!expiryDate instanceof Date) {
     Logger.log('Invalid date for item: ' + itemName);
@@ -149,7 +147,15 @@ function createOrUpdateDeadlineEvent(calendar, row, existingEvents) {
   const title = `${type}: ${itemName} EXPIRES ${renewalType}`;
   const eventKey = `${title}_${expiryDate.toDateString()}`;
   
-  const description = `
+  let description = '';
+  
+  // Add links at the beginning if they exist, preserving hyperlinks
+  if (links && links.toString().trim()) {
+    const processedLinks = extractLinksFromRichText(linksRichTextValue, links);
+    description += `🔗 LINKS & RESOURCES:\n${processedLinks}\n\n`;
+  }
+  
+  description += `
 Item: ${itemName}
 Type: ${type}
 Expiry/Due Date: ${expiryDate.toDateString()}
@@ -160,7 +166,7 @@ Priority: ${priority}
 Renewal Information:
 • Auto Renews: ${autoRenews || 'N/A'}
 • Needs Manual Action: ${needsManualAction || 'N/A'}
-• Renewal/Action Notes: ${renewalActionNotes || 'None'}
+• Renewal/Action Notes: ${notesRichTextValue ? extractLinksFromRichText(notesRichTextValue, renewalActionNotes) : (renewalActionNotes || 'None')}
 
 This is an automated reminder from the SRE Deadlines tracker.
 ${needsManualAction ? '\n⚠️  MANUAL ACTION REQUIRED - This will not auto-renew!' : ''}
@@ -262,8 +268,9 @@ function extractLinksFromRichText(richTextValue, originalText) {
       
       // Append the URL to the display text if it's not already there
       if (!result.includes(linkUrl)) {
-        // Replace the display text with "display text (URL)"
-        result = result.replace(runText, `${runText} (${linkUrl}) 🔗`);
+        // Format hyperlinks nicely: "Display Text: URL" or just "URL" if no display text
+        const linkFormat = runText.trim() ? `${runText}: ${linkUrl}` : linkUrl;
+        result = result.replace(runText, linkFormat);
       }
     }
   });
@@ -423,7 +430,7 @@ function createDailyTrigger() {
 // Utility function to get summary of upcoming deadlines
 function getUpcomingDeadlines() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
   
   const now = new Date();
   const thirtyDaysFromNow = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000));
