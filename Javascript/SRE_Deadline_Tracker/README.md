@@ -16,13 +16,13 @@ A Google Apps Script solution to automatically sync deadline tracking from Googl
 
 ## Setup Instructions
 
-### 1. Create Google Calendar
+### 1. Create Google Calendar (If not already created)
 
 1. Go to Google Calendar (calendar.google.com)
 2. Create a new calendar named "SRE Deadlines"
 3. Share with your SRE team with "Make changes to events" permission
 
-### 2. Create Google Sheet
+### 2. Create Google Sheet (If not already created)
 
 Create a new Google Sheet with these column headers:
 
@@ -103,7 +103,6 @@ The script uses intelligent event management to maximize efficiency:
 - **Non-Destructive Updates**: Updates event descriptions when data changes but preserves manual modifications (attendees, custom reminders, etc.)
 - **Orphaned Event Cleanup**: Optionally removes calendar events for items no longer in the spreadsheet
 - **Detailed Logging**: Reports exactly what actions were taken (created, updated, or skipped)
-- **Faster Execution**: Significantly fewer API calls compared to clearing and recreating all events
 
 ## Usage Examples
 
