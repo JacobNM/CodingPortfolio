@@ -26,9 +26,9 @@ A Google Apps Script solution to automatically sync deadline tracking from Googl
 
 Create a new Google Sheet with these column headers:
 
-| A | B | C | D | E | F | G | H | I |
-|---|---|---|---|---|---|---|---|---|
-| **Item Name** | **Type** | **Expiry/Due Date** | **Owner** | **Status** | **Needs Manual Action** | **Auto Renews** | **Renewal/Action Notes** | **Priority** |
+| A | B | C | D | E | F | G | H | I | J |
+|---|---|---|---|---|---|---|---|---|---|
+| **Item Name** | **Type** | **Expiry/Due Date** | **Owner** | **Status** | **Needs Manual Action** | **Auto Renews** | **Renewal/Action Notes** | **Priority** | **Links/Hyperlinks** |
 
 ### 3. Install Google Apps Script
 
@@ -55,6 +55,7 @@ Create a new Google Sheet with these column headers:
 - **Auto Renews**: Yes/No/N/A - automatically renews itself
 - **Renewal/Action Notes**: Additional information about renewal process or required actions (supports hyperlinks which are copied to calendar events)
 - **Priority**: High/Medium/Low - affects reminder frequency
+- **Links/Hyperlinks**: Important URLs and resources related to the item (appears at the top of calendar events with preserved hyperlink formatting)
 
 ## Reminder Schedule
 
@@ -117,6 +118,7 @@ The script uses intelligent event management to maximize efficiency:
 - Auto Renews: Yes
 - Renewal/Action Notes: "Let's Encrypt auto-renewal configured"
 - Priority: "High"
+- Links/Hyperlinks: "Certificate Portal: https://portal.example.com"
 
 ### Azure Key Example
 
@@ -129,6 +131,7 @@ The script uses intelligent event management to maximize efficiency:
 - Auto Renews: No
 - Renewal/Action Notes: "Manual rotation required, update app configs"
 - Priority: "High"
+- Links/Hyperlinks: "Azure Portal: https://portal.azure.com | Documentation: https://docs.microsoft.com/azure-keys"
 
 ## Troubleshooting
 
