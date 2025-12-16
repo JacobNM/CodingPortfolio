@@ -1,0 +1,397 @@
+// SRE Deadline Tracker - Google Apps Script
+// Configuration - Update these values
+const CALENDAR_NAME = '<Your Calendar Name>'; // Change to your desired calendar name
+const SHEET_NAME = '<Your Sheet Name>'; // Change if your sheet has a different name
+
+function syncDeadlinesToCalendar() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const calendar = getOrCreateCalendar();
+    
+    // First update all statuses based on expiry dates
+    updateStatusColumn(sheet);
+    
+    // Get data from sheet (skip header row) - now 9 columns
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
+    
+    // Get rich text data to extract hyperlinks from the notes column
+    const richTextData = sheet.getRange(2, 8, sheet.getLastRow() - 1, 1).getRichTextValues();
+    
+    // Get existing events to avoid duplicates
+    const existingEvents = getExistingDeadlineEvents(calendar);
+    
+    // Create or update calendar events
+    data.forEach((row, index) => {
+      if (row[0] && row[2]) { // Check if item name and expiry date exist
+        // Extract hyperlinks from the notes column (column H, index 7)
+        const notesWithLinks = extractLinksFromRichText(richTextData[index][0], row[7]);
+        const enhancedRow = [...row];
+        enhancedRow[7] = notesWithLinks; // Replace notes with version that includes extracted URLs
+        
+        createOrUpdateDeadlineEvent(calendar, enhancedRow, existingEvents);
+      }
+    });
+    
+    // Optional: Clean up events that are no longer in the sheet
+    // Comment out the next line if you don't want to auto-delete orphaned events
+    cleanupOrphanedEvents(existingEvents);
+    
+    Logger.log('Successfully synced deadlines to calendar');
+    
+  } catch (error) {
+    Logger.log('Error syncing deadlines: ' + error.toString());
+  }
+}
+
+function getOrCreateCalendar() {
+  let calendar;
+  const calendars = CalendarApp.getCalendarsByName(CALENDAR_NAME);
+  
+  if (calendars.length > 0) {
+    calendar = calendars[0];
+  } else {
+    calendar = CalendarApp.createCalendar(CALENDAR_NAME);
+    Logger.log('Created new calendar: ' + CALENDAR_NAME);
+  }
+  
+  return calendar;
+}
+
+function updateStatusColumn(sheet) {
+  const lastRow = sheet.getLastRow();
+  Logger.log('Last row in sheet: ' + lastRow);
+  
+  if (lastRow <= 1) {
+    Logger.log('No data rows found (only header row or empty sheet)');
+    return;
+  }
+  
+  const data = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+  const now = new Date();
+  const statusUpdates = [];
+  
+  Logger.log('Processing ' + data.length + ' data rows');
+  
+  data.forEach((row, index) => {
+    const [itemName, type, expiryDate, owner, currentStatus, needsManualAction, autoRenews, renewalActionNotes, priority] = row;
+    
+    if (expiryDate && expiryDate instanceof Date) {
+      const newStatus = calculateStatus(expiryDate, needsManualAction, autoRenews, now);
+      statusUpdates.push([newStatus]);
+      Logger.log(`Row ${index + 2}: ${itemName} -> ${newStatus}`);
+    } else {
+      statusUpdates.push([currentStatus || 'Unknown']);
+      Logger.log(`Row ${index + 2}: ${itemName} -> ${currentStatus || 'Unknown'} (invalid/missing date)`);
+    }
+  });
+  
+  // Update the status column (column E, index 5)
+  if (statusUpdates.length > 0) {
+    sheet.getRange(2, 5, statusUpdates.length, 1).setValues(statusUpdates);
+    Logger.log('Updated ' + statusUpdates.length + ' status values');
+  }
+}
+
+function calculateStatus(expiryDate, needsManualAction, autoRenews, now) {
+  const timeDiff = expiryDate.getTime() - now.getTime();
+  const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+  
+  // Normalize string values to boolean for logic
+  const requiresManualAction = (needsManualAction && needsManualAction.toString().toLowerCase() === 'yes');
+  const isAutoRenewing = (autoRenews && autoRenews.toString().toLowerCase() === 'yes');
+  
+  // If expired
+  if (daysDiff < 0) {
+    return 'Expired';
+  }
+  
+  // If expiring within 7 days
+  if (daysDiff <= 7) {
+    if (requiresManualAction) {
+      return 'Action Required';
+    } else {
+      return 'Expiring Soon';
+    }
+  }
+  
+  // If expiring within 30 days
+  if (daysDiff <= 30) {
+    if (requiresManualAction) {
+      return 'Action Required';
+    } else if (isAutoRenewing) {
+      return 'Monitoring';
+    } else {
+      return 'Expiring Soon';
+    }
+  }
+  
+  // If expiring within 90 days and needs manual action
+  if (daysDiff <= 90 && requiresManualAction) {
+    return 'Monitoring';
+  }
+  
+  // Default status for items with plenty of time
+  return 'Active';
+}
+
+function createOrUpdateDeadlineEvent(calendar, row, existingEvents) {
+  const [itemName, type, expiryDate, owner, status, needsManualAction, autoRenews, renewalActionNotes, priority] = row;
+  
+  if (!expiryDate instanceof Date) {
+    Logger.log('Invalid date for item: ' + itemName);
+    return;
+  }
+  
+  // Create more descriptive title based on renewal type
+  const isAutoRenewing = (autoRenews && autoRenews.toString().toLowerCase() === 'yes');
+  const requiresManualAction = (needsManualAction && needsManualAction.toString().toLowerCase() === 'yes');
+  const renewalType = isAutoRenewing ? '(Auto-Renewing)' : requiresManualAction ? '(MANUAL ACTION REQUIRED)' : '';
+  const title = `${type}: ${itemName} EXPIRES ${renewalType}`;
+  const eventKey = `${title}_${expiryDate.toDateString()}`;
+  
+  const description = `
+Item: ${itemName}
+Type: ${type}
+Expiry/Due Date: ${expiryDate.toDateString()}
+Owner: ${owner}
+Status: ${status}
+Priority: ${priority}
+
+Renewal Information:
+• Auto Renews: ${autoRenews || 'N/A'}
+• Needs Manual Action: ${needsManualAction || 'N/A'}
+• Renewal/Action Notes: ${renewalActionNotes || 'None'}
+
+This is an automated reminder from the SRE Deadlines tracker.
+${needsManualAction ? '\n⚠️  MANUAL ACTION REQUIRED - This will not auto-renew!' : ''}
+  `.trim();
+  
+  // Check if event already exists
+  if (existingEvents.has(eventKey)) {
+    const existingEvent = existingEvents.get(eventKey);
+    
+    // Update description if it has changed (preserves manual edits to other fields)
+    if (existingEvent.getDescription() !== description) {
+      existingEvent.setDescription(description);
+      Logger.log('Updated existing event: ' + title);
+      Logger.log('Event description set to: ' + description.substring(0, 200) + '...');
+    } else {
+      Logger.log('Skipped existing event: ' + title);
+    }
+    
+    // Remove from map so we know it's been processed
+    existingEvents.delete(eventKey);
+  } else {
+    // Create new event
+    const event = calendar.createAllDayEvent(title, expiryDate, {
+      description: description
+    });
+    
+    // Add reminders based on priority and renewal type
+    addSmartReminders(event, priority, needsManualAction, autoRenews);
+    
+    Logger.log('Created new event: ' + title);
+    Logger.log('Event description set to: ' + description.substring(0, 200) + '...');
+  }
+}
+
+// Helper function to extract URLs from Google Sheets hyperlinks
+function extractLinksFromRichText(richTextValue, originalText) {
+  if (!richTextValue) {
+    return originalText || 'None';
+  }
+  
+  let result = originalText || richTextValue.getText();
+  const runs = richTextValue.getRuns();
+  
+  Logger.log('Processing rich text with ' + runs.length + ' runs');
+  Logger.log('Original text: ' + result);
+  
+  runs.forEach((run, index) => {
+    const linkUrl = run.getLinkUrl();
+    const runText = run.getText();
+    
+    if (linkUrl) {
+      Logger.log(`Found hyperlink in run ${index}: "${runText}" -> ${linkUrl}`);
+      
+      // Append the URL to the display text if it's not already there
+      if (!result.includes(linkUrl)) {
+        // Replace the display text with "display text (URL)"
+        result = result.replace(runText, `${runText} (${linkUrl}) 🔗`);
+      }
+    }
+  });
+  
+  Logger.log('Final processed text: ' + result);
+  return result;
+}
+
+// Optional: Clean up events that are no longer in the sheet
+function cleanupOrphanedEvents(existingEvents) {
+  let removedCount = 0;
+  existingEvents.forEach((event, key) => {
+    // These events exist in calendar but not in sheet anymore
+    event.deleteEvent();
+    removedCount++;
+    Logger.log('Removed orphaned event: ' + event.getTitle());
+  });
+  
+  if (removedCount > 0) {
+    Logger.log('Cleaned up ' + removedCount + ' orphaned events');
+  }
+}
+
+function addSmartReminders(event, priority, needsManualAction, autoRenews) {
+  // Clear default reminders
+  event.removeAllReminders();
+  
+  // Normalize string values to boolean for logic
+  const requiresManualAction = (needsManualAction && needsManualAction.toString().toLowerCase() === 'yes');
+  const isAutoRenewing = (autoRenews && autoRenews.toString().toLowerCase() === 'yes');
+  
+  // More aggressive reminders for manual actions
+  if (requiresManualAction) {
+    switch (priority?.toLowerCase()) {
+      case 'high':
+        event.addEmailReminder(60 * 24 * 60); // 60 days
+        event.addEmailReminder(30 * 24 * 60); // 30 days
+        event.addEmailReminder(14 * 24 * 60); // 14 days
+        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        event.addEmailReminder(3 * 24 * 60);  // 3 days
+        event.addEmailReminder(1 * 24 * 60);  // 1 day
+        break;
+      case 'medium':
+        event.addEmailReminder(30 * 24 * 60); // 30 days
+        event.addEmailReminder(14 * 24 * 60); // 14 days
+        event.addEmailReminder(3 * 24 * 60);  // 3 days
+        break;
+      case 'low':
+      default:
+        event.addEmailReminder(14 * 24 * 60); // 14 days
+        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        break;
+    }
+  } else if (isAutoRenewing) {
+    // Fewer reminders for auto-renewing items (just for awareness)
+    switch (priority?.toLowerCase()) {
+      case 'high':
+        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        event.addEmailReminder(1 * 24 * 60);  // 1 day
+        break;
+      case 'medium':
+        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        break;
+      case 'low':
+      default:
+        event.addEmailReminder(3 * 24 * 60);  // 3 days
+        break;
+    }
+  } else {
+    // Standard reminders for items that don't specify renewal type
+    switch (priority?.toLowerCase()) {
+      case 'high':
+        event.addEmailReminder(30 * 24 * 60); // 30 days
+        event.addEmailReminder(14 * 24 * 60); // 14 days
+        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        event.addEmailReminder(1 * 24 * 60);  // 1 day
+        break;
+      case 'medium':
+        event.addEmailReminder(14 * 24 * 60); // 14 days
+        event.addEmailReminder(3 * 24 * 60);  // 3 days
+        break;
+      case 'low':
+      default:
+        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        break;
+    }
+  }
+}
+
+function getExistingDeadlineEvents(calendar) {
+  const now = new Date();
+  const oneYearFromNow = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+  const events = calendar.getEvents(now, oneYearFromNow);
+  
+  // Create a map of existing events by their identifier
+  const existingEvents = new Map();
+  
+  events.forEach(event => {
+    if (event.getTitle().includes('EXPIRES')) {
+      // Use a combination of item name and expiry date as unique identifier
+      const title = event.getTitle();
+      const date = event.getStartTime().toDateString();
+      const key = `${title}_${date}`;
+      existingEvents.set(key, event);
+    }
+  });
+  
+  Logger.log('Found ' + existingEvents.size + ' existing deadline events');
+  return existingEvents;
+}
+
+// Function to manually trigger sync (for testing)
+function manualSync() {
+  syncDeadlinesToCalendar();
+}
+
+// Function to update only statuses without calendar sync
+function updateStatusesOnly() {
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    Logger.log('Active spreadsheet: ' + spreadsheet.getName());
+    
+    const sheet = spreadsheet.getSheetByName(SHEET_NAME);
+    if (!sheet) {
+      Logger.log('Sheet "' + SHEET_NAME + '" not found. Available sheets: ' + spreadsheet.getSheets().map(s => s.getName()).join(', '));
+      return;
+    }
+    
+    Logger.log('Found sheet: ' + sheet.getName());
+    updateStatusColumn(sheet);
+    Logger.log('Status column updated successfully');
+  } catch (error) {
+    Logger.log('Error updating statuses: ' + error.toString());
+  }
+}
+
+// Set up automatic daily sync
+function createDailyTrigger() {
+  // Delete existing triggers
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'syncDeadlinesToCalendar') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  
+  // Create new daily trigger
+  ScriptApp.newTrigger('syncDeadlinesToCalendar')
+    .timeBased()
+    .everyDays(1)
+    .atHour(9) // 9 AM
+    .create();
+    
+  Logger.log('Created daily sync trigger for 9 AM');
+}
+
+// Utility function to get summary of upcoming deadlines
+function getUpcomingDeadlines() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
+  
+  const now = new Date();
+  const thirtyDaysFromNow = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000));
+  
+  const upcomingDeadlines = data.filter(row => {
+    const expiryDate = new Date(row[2]);
+    return expiryDate >= now && expiryDate <= thirtyDaysFromNow;
+  });
+  
+  Logger.log('Upcoming deadlines in next 30 days: ' + upcomingDeadlines.length);
+  upcomingDeadlines.forEach(row => {
+    const [itemName, type, expiryDate, owner, status, needsManualAction] = row;
+    Logger.log(`${itemName} (${type}) - Expiry/Due: ${expiryDate} - Owner: ${owner} - Manual Action: ${needsManualAction || 'N/A'}`);
+  });
+  
+  return upcomingDeadlines;
+}
