@@ -319,54 +319,54 @@ function addSmartReminders(event, priority, needsManualAction, autoRenews) {
   if (requiresManualAction) {
     switch (priority?.toLowerCase()) {
       case 'high':
-        event.addEmailReminder(60 * 24 * 60); // 60 days
-        event.addEmailReminder(30 * 24 * 60); // 30 days
-        event.addEmailReminder(7 * 24 * 60);  // 7 days
-        event.addEmailReminder(3 * 24 * 60);  // 3 days
-        event.addEmailReminder(1 * 24 * 60);  // 1 day
+        event.addPopupReminder(30 * 24 * 60); // 30 days
+        event.addPopupReminder(14 * 24 * 60); // 14 days
+        event.addPopupReminder(7 * 24 * 60);  // 7 days
+        event.addPopupReminder(3 * 24 * 60);  // 3 days
+        event.addPopupReminder(1 * 24 * 60);  // 1 day
         break;
       case 'medium':
-        event.addEmailReminder(30 * 24 * 60); // 30 days
-        event.addEmailReminder(14 * 24 * 60); // 14 days
-        event.addEmailReminder(3 * 24 * 60);  // 3 days
+        event.addPopupReminder(30 * 24 * 60); // 30 days
+        event.addPopupReminder(14 * 24 * 60); // 14 days
+        event.addPopupReminder(3 * 24 * 60);  // 3 days
         break;
       case 'low':
       default:
-        event.addEmailReminder(14 * 24 * 60); // 14 days
-        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        event.addPopupReminder(14 * 24 * 60); // 14 days
+        event.addPopupReminder(7 * 24 * 60);  // 7 days
         break;
     }
   } else if (isAutoRenewing) {
     // Fewer reminders for auto-renewing items (just for awareness)
     switch (priority?.toLowerCase()) {
       case 'high':
-        event.addEmailReminder(7 * 24 * 60);  // 7 days
-        event.addEmailReminder(1 * 24 * 60);  // 1 day
+        event.addPopupReminder(7 * 24 * 60);  // 7 days
+        event.addPopupReminder(1 * 24 * 60);  // 1 day
         break;
       case 'medium':
-        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        event.addPopupReminder(7 * 24 * 60);  // 7 days
         break;
       case 'low':
       default:
-        event.addEmailReminder(3 * 24 * 60);  // 3 days
+        event.addPopupReminder(3 * 24 * 60);  // 3 days
         break;
     }
   } else {
     // Standard reminders for items that don't specify renewal type
     switch (priority?.toLowerCase()) {
       case 'high':
-        event.addEmailReminder(30 * 24 * 60); // 30 days
-        event.addEmailReminder(14 * 24 * 60); // 14 days
-        event.addEmailReminder(7 * 24 * 60);  // 7 days
-        event.addEmailReminder(1 * 24 * 60);  // 1 day
+        event.addPopupReminder(30 * 24 * 60); // 30 days
+        event.addPopupReminder(14 * 24 * 60); // 14 days
+        event.addPopupReminder(7 * 24 * 60);  // 7 days
+        event.addPopupReminder(1 * 24 * 60);  // 1 day
         break;
       case 'medium':
-        event.addEmailReminder(14 * 24 * 60); // 14 days
-        event.addEmailReminder(3 * 24 * 60);  // 3 days
+        event.addPopupReminder(14 * 24 * 60); // 14 days
+        event.addPopupReminder(3 * 24 * 60);  // 3 days
         break;
       case 'low':
       default:
-        event.addEmailReminder(7 * 24 * 60);  // 7 days
+        event.addPopupReminder(7 * 24 * 60);  // 7 days
         break;
     }
   }
