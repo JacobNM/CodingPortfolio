@@ -61,7 +61,7 @@ Create a new Google Sheet with these column headers:
 
 ### Items Requiring Manual Action
 
-- **High Priority**: 60, 30, 14, 7, 3, 1 days before
+- **High Priority**: 60, 30, 7, 3, 1 days before
 - **Medium Priority**: 30, 14, 3 days before  
 - **Low Priority**: 14, 7 days before
 
@@ -117,7 +117,7 @@ The script uses intelligent event management to maximize efficiency:
 - Auto Renews: Yes
 - Renewal/Action Notes: "Let's Encrypt auto-renewal configured"
 - Priority: "High"
-- Links/Hyperlinks: "Certificate Portal: https://portal.example.com"
+- Links/Hyperlinks: "Certificate Portal: <https://portal.example.com>"
 
 ### Azure Key Example
 
@@ -130,7 +130,7 @@ The script uses intelligent event management to maximize efficiency:
 - Auto Renews: No
 - Renewal/Action Notes: "Manual rotation required, update app configs"
 - Priority: "High"
-- Links/Hyperlinks: "Azure Portal: https://portal.azure.com | Documentation: https://docs.microsoft.com/azure-keys"
+- Links/Hyperlinks: "Azure Portal: <https://portal.azure.com> | Documentation: <https://docs.microsoft.com/azure-keys>"
 
 ## Troubleshooting
 
