@@ -8,7 +8,7 @@ A Google Apps Script solution to automatically sync deadline tracking from Googl
 - **Automatic status calculation** based on expiry dates and renewal settings
 - **Smart event management** - preserves existing events and manual changes
 - **Hyperlink processing** - extracts and preserves URLs from Google Sheets rich text
-- Smart reminder system based on priority and renewal type
+- Smart popup notification system based on priority and renewal type
 - Differentiates between auto-renewing and manual action required items
 - Daily automatic synchronization
 - Customizable reminder schedules
@@ -61,7 +61,7 @@ Create a new Google Sheet with these column headers:
 
 ### Items Requiring Manual Action
 
-- **High Priority**: 60, 30, 7, 3, 1 days before
+- **High Priority**: 30, 14, 7, 3, 1 days before
 - **Medium Priority**: 30, 14, 3 days before  
 - **Low Priority**: 14, 7 days before
 
