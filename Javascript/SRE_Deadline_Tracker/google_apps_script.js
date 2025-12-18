@@ -11,6 +11,12 @@ function syncDeadlinesToCalendar() {
     // First update all statuses based on expiry dates
     updateStatusColumn(sheet);
     
+    // Clean up any duplicate events before processing
+    const duplicatesRemoved = removeDuplicateEvents(calendar);
+    if (duplicatesRemoved > 0) {
+      Logger.log(`Removed ${duplicatesRemoved} duplicate events from calendar`);
+    }
+    
     // Get data from sheet (skip header row) - now 10 columns
     const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
     
@@ -18,7 +24,7 @@ function syncDeadlinesToCalendar() {
     const notesRichTextData = sheet.getRange(2, 8, sheet.getLastRow() - 1, 1).getRichTextValues();
     const linksRichTextData = sheet.getRange(2, 10, sheet.getLastRow() - 1, 1).getRichTextValues();
     
-    // Get existing events to avoid duplicates
+    // Get existing events to avoid duplicates (refresh after cleanup)
     const existingEvents = getExistingDeadlineEvents(calendar);
     
     // Create or update calendar events
@@ -70,18 +76,18 @@ function updateStatusColumn(sheet) {
   
   Logger.log('Processing ' + data.length + ' data rows');
   
-  data.forEach((row, index) => {
-    const [itemName, type, expiryDate, owner, currentStatus, needsManualAction, autoRenews, renewalActionNotes, priority] = row;
-    
-    if (expiryDate && expiryDate instanceof Date) {
-      const newStatus = calculateStatus(expiryDate, needsManualAction, autoRenews, now);
-      statusUpdates.push([newStatus]);
-      Logger.log(`Row ${index + 2}: ${itemName} -> ${newStatus}`);
-    } else {
-      statusUpdates.push([currentStatus || 'Unknown']);
-      Logger.log(`Row ${index + 2}: ${itemName} -> ${currentStatus || 'Unknown'} (invalid/missing date)`);
-    }
-  });
+data.forEach((row, index) => {
+  const [itemName, type, expiryDate, owner, currentStatus, needsManualAction, autoRenews, renewalActionNotes, priority] = row;
+  
+  if (expiryDate && expiryDate instanceof Date) {
+    const newStatus = calculateStatus(expiryDate, needsManualAction, autoRenews, now);
+    statusUpdates.push([newStatus]);
+    Logger.log(`Row ${index + 2}: ${itemName} -> ${newStatus}`);
+  } else {
+    statusUpdates.push([currentStatus || 'Unknown']);
+    Logger.log(`Row ${index + 2}: ${itemName} -> ${currentStatus || 'Unknown'} (invalid/missing date)`);
+  }
+});
   
   // Update the status column (column E, index 5)
   if (statusUpdates.length > 0) {
@@ -103,33 +109,33 @@ function calculateStatus(expiryDate, needsManualAction, autoRenews, now) {
     return 'Expired';
   }
   
-  // If expiring within 7 days
-  if (daysDiff <= 7) {
-    if (requiresManualAction) {
-      return 'Action Required';
-    } else {
-      return 'Expiring Soon';
+    // If expiring within 7 days
+    if (daysDiff <= 7) {
+      if (requiresManualAction) {
+        return 'Action Required';
+      } else {
+        return 'Expiring Soon';
+      }
     }
-  }
-  
-  // If expiring within 30 days
-  if (daysDiff <= 30) {
-    if (requiresManualAction) {
-      return 'Action Required';
-    } else if (isAutoRenewing) {
+    
+    // If expiring within 30 days
+    if (daysDiff <= 30) {
+      if (requiresManualAction) {
+        return 'Action Required';
+      } else if (isAutoRenewing) {
+        return 'Monitoring';
+      } else {
+        return 'Expiring Soon';
+      }
+    }
+    
+    // If expiring within 90 days and needs manual action
+    if (daysDiff <= 90 && requiresManualAction) {
       return 'Monitoring';
-    } else {
-      return 'Expiring Soon';
     }
-  }
-  
-  // If expiring within 90 days and needs manual action
-  if (daysDiff <= 90 && requiresManualAction) {
-    return 'Monitoring';
-  }
-  
-  // Default status for items with plenty of time
-  return 'Active';
+    
+    // Default status for items with plenty of time
+    return 'Active';
 }
 
 function createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTextValue = null, linksRichTextValue = null) {
@@ -145,7 +151,8 @@ function createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTex
   const requiresManualAction = (needsManualAction && needsManualAction.toString().toLowerCase() === 'yes');
   const renewalType = isAutoRenewing ? '(Auto-Renewing)' : requiresManualAction ? '(MANUAL ACTION REQUIRED)' : '';
   const title = `${type}: ${itemName} EXPIRES ${renewalType}`;
-  const eventKey = `${title}_${expiryDate.toDateString()}`;
+  const normalizedTitle = normalizeEventTitle(title);
+  const eventKey = `${normalizedTitle}_${expiryDate.toDateString()}`;  // Use normalized title for key
   
   let description = '';
   
@@ -169,7 +176,7 @@ Renewal Information:
 • Renewal/Action Notes: ${notesRichTextValue ? extractLinksFromRichText(notesRichTextValue, renewalActionNotes) : (renewalActionNotes || 'None')}
 
 This is an automated reminder from the SRE Deadlines tracker.
-${needsManualAction ? '\n⚠️  MANUAL ACTION REQUIRED - This will not auto-renew!' : ''}
+${requiresManualAction && !isAutoRenewing ? '\n⚠️  MANUAL ACTION REQUIRED - This will not auto-renew!' : ''}
   `.trim();
   
   // Check if event already exists
@@ -190,6 +197,12 @@ ${needsManualAction ? '\n⚠️  MANUAL ACTION REQUIRED - This will not auto-ren
     // Remove from map so we know it's been processed
     existingEvents.delete(eventKey);
   } else {
+    // Double-check for duplicates before creating (safety net)
+    if (isDuplicateEvent(calendar, title, expiryDate)) {
+      Logger.log('Skipping creation of duplicate event: ' + title);
+      return;
+    }
+    
     // Create new event
     const event = calendar.createAllDayEvent(title, expiryDate, {
       description: description
@@ -362,19 +375,28 @@ function addSmartReminders(event, priority, needsManualAction, autoRenews) {
 
 function getExistingDeadlineEvents(calendar) {
   const now = new Date();
-  const oneYearFromNow = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
-  const events = calendar.getEvents(now, oneYearFromNow);
+  const fourYearsFromNow = new Date(now.getFullYear() + 4, now.getMonth(), now.getDate());
+  const events = calendar.getEvents(now, fourYearsFromNow);
   
   // Create a map of existing events by their identifier
   const existingEvents = new Map();
   
   events.forEach(event => {
     if (event.getTitle().includes('EXPIRES')) {
-      // Use a combination of item name and expiry date as unique identifier
+      // Extract item name from title more reliably
       const title = event.getTitle();
       const date = event.getStartTime().toDateString();
-      const key = `${title}_${date}`;
-      existingEvents.set(key, event);
+      
+      // Create multiple possible keys to catch different title formats
+      const normalizedTitle = normalizeEventTitle(title);
+      const primaryKey = `${normalizedTitle}_${date}`;
+      
+      // If we already have an event with this key, we found a potential duplicate
+      if (existingEvents.has(primaryKey)) {
+        Logger.log(`Potential duplicate detected: ${title} on ${date}`);
+      }
+      
+      existingEvents.set(primaryKey, event);
     }
   });
   
@@ -425,6 +447,115 @@ function createDailyTrigger() {
     .create();
     
   Logger.log('Created daily sync trigger for 9 AM');
+}
+
+// Function to remove duplicate events from the calendar
+function removeDuplicateEvents(calendar) {
+  const now = new Date();
+  const fourYearsFromNow = new Date(now.getFullYear() + 4, now.getMonth(), now.getDate());
+  const events = calendar.getEvents(now, fourYearsFromNow);
+  
+  // Group events by normalized identifier
+  const eventGroups = new Map();
+  
+  events.forEach(event => {
+    if (event.getTitle().includes('EXPIRES')) {
+      const normalizedTitle = normalizeEventTitle(event.getTitle());
+      const date = event.getStartTime().toDateString();
+      const key = `${normalizedTitle}_${date}`;
+      
+      if (!eventGroups.has(key)) {
+        eventGroups.set(key, []);
+      }
+      eventGroups.get(key).push(event);
+    }
+  });
+  
+  let duplicatesRemoved = 0;
+  
+  // Remove duplicates, keeping the most recent one
+  eventGroups.forEach((eventList, key) => {
+    if (eventList.length > 1) {
+      Logger.log(`Found ${eventList.length} duplicate events for: ${key}`);
+      
+      // Sort by creation time (most recent first) and keep the first one
+      eventList.sort((a, b) => {
+        const aDate = a.getDateCreated() || new Date(0);
+        const bDate = b.getDateCreated() || new Date(0);
+        return bDate.getTime() - aDate.getTime();
+      });
+      
+      // Delete all but the first (most recent) event
+      for (let i = 1; i < eventList.length; i++) {
+        try {
+          eventList[i].deleteEvent();
+          duplicatesRemoved++;
+          Logger.log(`Deleted duplicate event: ${eventList[i].getTitle()}`);
+        } catch (error) {
+          Logger.log(`Error deleting duplicate event: ${error.toString()}`);
+        }
+      }
+    }
+  });
+  
+  return duplicatesRemoved;
+}
+
+// Function to normalize event titles for better duplicate detection
+function normalizeEventTitle(title) {
+  // Remove common variations that might cause false non-matches
+  return title
+    .replace(/\s*\(Auto-Renewing\)\s*/g, '')
+    .replace(/\s*\(MANUAL ACTION REQUIRED\)\s*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// Standalone function to clean up duplicates (can be run manually)
+function cleanupDuplicates() {
+  try {
+    const calendar = getOrCreateCalendar();
+    const duplicatesRemoved = removeDuplicateEvents(calendar);
+    
+    if (duplicatesRemoved > 0) {
+      Logger.log(`Successfully removed ${duplicatesRemoved} duplicate events`);
+    } else {
+      Logger.log('No duplicate events found');
+    }
+    
+    return duplicatesRemoved;
+  } catch (error) {
+    Logger.log('Error cleaning up duplicates: ' + error.toString());
+    return 0;
+  }
+}
+
+// Enhanced function to detect potential duplicates before creation
+function isDuplicateEvent(calendar, eventTitle, eventDate) {
+  const normalizedNewTitle = normalizeEventTitle(eventTitle);
+  const newDateString = eventDate.toDateString();
+  
+  // Get events for the specific date to minimize search scope
+  const dayStart = new Date(eventDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(eventDate);
+  dayEnd.setHours(23, 59, 59, 999);
+  
+  const eventsOnDate = calendar.getEvents(dayStart, dayEnd);
+  
+  for (const event of eventsOnDate) {
+    if (event.getTitle().includes('EXPIRES')) {
+      const normalizedExistingTitle = normalizeEventTitle(event.getTitle());
+      
+      if (normalizedExistingTitle === normalizedNewTitle) {
+        Logger.log(`Duplicate detected: "${eventTitle}" already exists on ${newDateString}`);
+        return true;
+      }
+    }
+  }
+  
+  return false;
 }
 
 // Utility function to get summary of upcoming deadlines
