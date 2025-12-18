@@ -321,7 +321,6 @@ function addSmartReminders(event, priority, needsManualAction, autoRenews) {
       case 'high':
         event.addEmailReminder(60 * 24 * 60); // 60 days
         event.addEmailReminder(30 * 24 * 60); // 30 days
-        event.addEmailReminder(14 * 24 * 60); // 14 days
         event.addEmailReminder(7 * 24 * 60);  // 7 days
         event.addEmailReminder(3 * 24 * 60);  // 3 days
         event.addEmailReminder(1 * 24 * 60);  // 1 day
