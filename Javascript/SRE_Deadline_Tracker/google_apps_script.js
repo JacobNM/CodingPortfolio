@@ -1,7 +1,7 @@
 // SRE Deadline Tracker - Google Apps Script
 // Configuration - Update these values
-const CALENDAR_NAME = '<Your Calendar Name>'; // e.g., 'SRE Deadlines'
-const SHEET_NAME = '<Your Sheet Name>'; // Change if your sheet has a different name
+const CALENDAR_NAME = '<Your Calendar Name>'; // e.g., 'SRE Infrastructure Deadlines'
+const SHEET_NAME = '<Your Sheet Name>'; // e.g., Deadline Tracker (Change if your sheet has a different name)
 
 // Expected Sheet Structure (11 columns):
 // A: Item Name, B: Type, C: Expiry/Due Date, D: Frequency, E: Owner, F: Status, 
@@ -158,7 +158,15 @@ function createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTex
   const renewalType = isAutoRenewing ? '(Auto-Renewing)' : requiresManualAction ? '(MANUAL ACTION REQUIRED)' : '';
   const title = `${type}: ${itemName} EXPIRES ${renewalType}`;
   const normalizedTitle = normalizeEventTitle(title);
-  const eventKey = `${normalizedTitle}_${expiryDate.toDateString()}`;  // Use normalized title for key
+  
+  // For recurring events, use a different key strategy to avoid conflicts with individual instances
+  const validatedFrequency = validateFrequency(frequency);
+  const isRecurring = validatedFrequency !== 'once';
+  const eventKey = isRecurring ? 
+    `${normalizedTitle}_RECURRING_${validatedFrequency}` : 
+    `${normalizedTitle}_${expiryDate.toDateString()}`;
+  
+  Logger.log(`Processing ${isRecurring ? 'recurring' : 'single'} event with key: ${eventKey}`);
   
   let description = '';
   
@@ -168,10 +176,17 @@ function createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTex
     description += `🔗 LINKS & RESOURCES:\n${processedLinks}\n\n`;
   }
   
+  // Build description - exclude expiry date for recurring events
   description += `
 Item: ${itemName}
-Type: ${type}
-Expiry/Due Date: ${expiryDate.toDateString()}
+Type: ${type}`;
+  
+  // Only include expiry date for non-recurring events
+  if (!isRecurring) {
+    description += `\nExpiry/Due Date: ${expiryDate.toDateString()}`;
+  }
+  
+  description += `
 Frequency: ${frequency || 'Once'}
 Owner: ${owner}
 Status: ${status}
@@ -203,6 +218,30 @@ ${requiresManualAction && !isAutoRenewing ? '\n⚠️  MANUAL ACTION REQUIRED - 
     
     // Remove from map so we know it's been processed
     existingEvents.delete(eventKey);
+  } else if (isRecurring) {
+    // For recurring events, also check for a general recurring key match
+    const generalRecurringKey = `${normalizedTitle}_RECURRING`;
+    if (existingEvents.has(generalRecurringKey)) {
+      const existingEvent = existingEvents.get(generalRecurringKey);
+      
+      // Update existing recurring event
+      const currentDescription = existingEvent.getDescription();
+      const finalDescription = preserveManualAdditions(currentDescription, description);
+      
+      if (currentDescription !== finalDescription) {
+        existingEvent.setDescription(finalDescription);
+        Logger.log('Updated existing recurring event: ' + title);
+      } else {
+        Logger.log('No changes needed for existing recurring event: ' + title);
+      }
+      
+      existingEvents.delete(generalRecurringKey);
+    } else {
+      // Create new recurring event
+      const event = createEventWithFrequency(calendar, title, expiryDate, frequency, description);
+      addSmartReminders(event, priority, needsManualAction, autoRenews);
+      Logger.log('Created new recurring event: ' + title + ' (Frequency: ' + (frequency || 'Once') + ')');
+    }
   } else {
     // Double-check for duplicates before creating (safety net)
     if (isDuplicateEvent(calendar, title, expiryDate)) {
@@ -226,28 +265,35 @@ function createEventWithFrequency(calendar, title, startDate, frequency, descrip
   const options = { description: description };
   const validatedFrequency = validateFrequency(frequency);
   
+  // Set default time to 9:00 AM for timed events
+  const eventStartTime = new Date(startDate);
+  eventStartTime.setHours(9, 0, 0, 0); // 9:00 AM
+  
+  const eventEndTime = new Date(eventStartTime);
+  eventEndTime.setHours(10, 0, 0, 0); // 10:00 AM (1 hour duration)
+  
   // Handle different frequency types
   switch (validatedFrequency) {
     case 'weekly':
-      return calendar.createEventSeries(title, startDate, startDate, 
+      return calendar.createEventSeries(title, eventStartTime, eventEndTime, 
         CalendarApp.newRecurrence().addWeeklyRule(), options);
     
     case 'bi-weekly':
-      return calendar.createEventSeries(title, startDate, startDate, 
+      return calendar.createEventSeries(title, eventStartTime, eventEndTime, 
         CalendarApp.newRecurrence().addWeeklyRule().interval(2), options);
     
     case 'monthly':
-      return calendar.createEventSeries(title, startDate, startDate, 
+      return calendar.createEventSeries(title, eventStartTime, eventEndTime, 
         CalendarApp.newRecurrence().addMonthlyRule(), options);
     
     case 'yearly':
-      return calendar.createEventSeries(title, startDate, startDate, 
+      return calendar.createEventSeries(title, eventStartTime, eventEndTime, 
         CalendarApp.newRecurrence().addYearlyRule(), options);
     
     case 'once':
     default:
-      // Create single all-day event
-      return calendar.createAllDayEvent(title, startDate, options);
+      // Create single timed event (not all-day)
+      return calendar.createEvent(title, eventStartTime, eventEndTime, options);
   }
 }
 
@@ -364,7 +410,27 @@ function extractLinksFromRichText(richTextValue, originalText) {
 function cleanupOrphanedEvents(existingEvents) {
   let removedCount = 0;
   existingEvents.forEach((event, key) => {
-    // These events exist in calendar but not in sheet anymore
+    // Skip recurring events (event series) - they should not be considered orphaned
+    // if the original row still exists, even if individual instances don't match the exact key
+    if (event.isRecurringEvent && event.isRecurringEvent()) {
+      Logger.log('Skipping cleanup of recurring event: ' + event.getTitle());
+      return;
+    }
+    
+    // Check if this might be part of a recurring series by looking for similar events
+    const eventTitle = event.getTitle();
+    const isPartOfSeries = Array.from(existingEvents.values()).some(otherEvent => {
+      return otherEvent !== event && 
+             otherEvent.getTitle() === eventTitle && 
+             (otherEvent.isRecurringEvent && otherEvent.isRecurringEvent());
+    });
+    
+    if (isPartOfSeries) {
+      Logger.log('Skipping cleanup of event that is part of a recurring series: ' + event.getTitle());
+      return;
+    }
+    
+    // These events exist in calendar but not in sheet anymore and are not recurring
     event.deleteEvent();
     removedCount++;
     Logger.log('Removed orphaned event: ' + event.getTitle());
@@ -447,23 +513,40 @@ function getExistingDeadlineEvents(calendar) {
   
   // Create a map of existing events by their identifier
   const existingEvents = new Map();
+  const seenRecurringSeries = new Set();
   
   events.forEach(event => {
     if (event.getTitle().includes('EXPIRES')) {
-      // Extract item name from title more reliably
       const title = event.getTitle();
-      const date = event.getStartTime().toDateString();
-      
-      // Create multiple possible keys to catch different title formats
       const normalizedTitle = normalizeEventTitle(title);
-      const primaryKey = `${normalizedTitle}_${date}`;
       
-      // If we already have an event with this key, we found a potential duplicate
-      if (existingEvents.has(primaryKey)) {
-        Logger.log(`Potential duplicate detected: ${title} on ${date}`);
+      // Check if this is a recurring event
+      const isRecurring = event.isRecurringEvent && event.isRecurringEvent();
+      
+      let eventKey;
+      if (isRecurring) {
+        // For recurring events, try to determine frequency from the series
+        // Use a general recurring key since we can't easily determine exact frequency from existing events
+        eventKey = `${normalizedTitle}_RECURRING`;
+        
+        // Avoid adding duplicate recurring series
+        if (seenRecurringSeries.has(eventKey)) {
+          Logger.log(`Skipping duplicate recurring event instance: ${title}`);
+          return;
+        }
+        seenRecurringSeries.add(eventKey);
+      } else {
+        // For single events, use date-based key
+        const date = event.getStartTime().toDateString();
+        eventKey = `${normalizedTitle}_${date}`;
       }
       
-      existingEvents.set(primaryKey, event);
+      // If we already have an event with this key, we found a potential duplicate
+      if (existingEvents.has(eventKey)) {
+        Logger.log(`Potential duplicate detected: ${title} with key ${eventKey}`);
+      }
+      
+      existingEvents.set(eventKey, event);
     }
   });
   
