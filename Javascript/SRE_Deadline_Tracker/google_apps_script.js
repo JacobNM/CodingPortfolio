@@ -3,6 +3,12 @@
 const CALENDAR_NAME = '<Your Calendar Name>'; // e.g., 'SRE Deadlines'
 const SHEET_NAME = '<Your Sheet Name>'; // Change if your sheet has a different name
 
+// Expected Sheet Structure (11 columns):
+// A: Item Name, B: Type, C: Expiry/Due Date, D: Frequency, E: Owner, F: Status, 
+// G: Needs Manual Action, H: Auto Renews, I: Renewal/Action Notes, J: Priority, K: Links
+// 
+// Frequency Column (D) Options: Once (default), Weekly, Bi-weekly, Monthly, Yearly
+
 function syncDeadlinesToCalendar() {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -17,12 +23,12 @@ function syncDeadlinesToCalendar() {
       Logger.log(`Removed ${duplicatesRemoved} duplicate events from calendar`);
     }
     
-    // Get data from sheet (skip header row) - now 10 columns
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
+    // Get data from sheet (skip header row) - now 11 columns (added frequency column)
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues();
     
-    // Get rich text data to extract hyperlinks from the notes column (column 8) and links column (column 10)
-    const notesRichTextData = sheet.getRange(2, 8, sheet.getLastRow() - 1, 1).getRichTextValues();
-    const linksRichTextData = sheet.getRange(2, 10, sheet.getLastRow() - 1, 1).getRichTextValues();
+    // Get rich text data to extract hyperlinks from the notes column (column 9) and links column (column 11)
+    const notesRichTextData = sheet.getRange(2, 9, sheet.getLastRow() - 1, 1).getRichTextValues();
+    const linksRichTextData = sheet.getRange(2, 11, sheet.getLastRow() - 1, 1).getRichTextValues();
     
     // Get existing events to avoid duplicates (refresh after cleanup)
     const existingEvents = getExistingDeadlineEvents(calendar);
@@ -70,14 +76,14 @@ function updateStatusColumn(sheet) {
     return;
   }
   
-  const data = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
   const now = new Date();
   const statusUpdates = [];
   
   Logger.log('Processing ' + data.length + ' data rows');
   
 data.forEach((row, index) => {
-  const [itemName, type, expiryDate, owner, currentStatus, needsManualAction, autoRenews, renewalActionNotes, priority] = row;
+  const [itemName, type, expiryDate, frequency, owner, currentStatus, needsManualAction, autoRenews, renewalActionNotes, priority] = row;
   
   if (expiryDate && expiryDate instanceof Date) {
     const newStatus = calculateStatus(expiryDate, needsManualAction, autoRenews, now);
@@ -89,9 +95,9 @@ data.forEach((row, index) => {
   }
 });
   
-  // Update the status column (column E, index 5)
+  // Update the status column (column F, index 6 - moved due to frequency column insertion)
   if (statusUpdates.length > 0) {
-    sheet.getRange(2, 5, statusUpdates.length, 1).setValues(statusUpdates);
+    sheet.getRange(2, 6, statusUpdates.length, 1).setValues(statusUpdates);
     Logger.log('Updated ' + statusUpdates.length + ' status values');
   }
 }
@@ -139,7 +145,7 @@ function calculateStatus(expiryDate, needsManualAction, autoRenews, now) {
 }
 
 function createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTextValue = null, linksRichTextValue = null) {
-  const [itemName, type, expiryDate, owner, status, needsManualAction, autoRenews, renewalActionNotes, priority, links] = row;
+  const [itemName, type, expiryDate, frequency, owner, status, needsManualAction, autoRenews, renewalActionNotes, priority, links] = row;
   
   if (!expiryDate instanceof Date) {
     Logger.log('Invalid date for item: ' + itemName);
@@ -166,6 +172,7 @@ function createOrUpdateDeadlineEvent(calendar, row, existingEvents, notesRichTex
 Item: ${itemName}
 Type: ${type}
 Expiry/Due Date: ${expiryDate.toDateString()}
+Frequency: ${frequency || 'Once'}
 Owner: ${owner}
 Status: ${status}
 Priority: ${priority}
@@ -203,17 +210,78 @@ ${requiresManualAction && !isAutoRenewing ? '\n⚠️  MANUAL ACTION REQUIRED - 
       return;
     }
     
-    // Create new event
-    const event = calendar.createAllDayEvent(title, expiryDate, {
-      description: description
-    });
+    // Create event (recurring or single based on frequency)
+    const event = createEventWithFrequency(calendar, title, expiryDate, frequency, description);
     
     // Add reminders based on priority and renewal type
     addSmartReminders(event, priority, needsManualAction, autoRenews);
     
-    Logger.log('Created new event: ' + title);
+    Logger.log('Created new event: ' + title + ' (Frequency: ' + (frequency || 'Once') + ')');
     Logger.log('Event description set to: ' + description.substring(0, 200) + '...');
   }
+}
+
+// Helper function to create events based on frequency
+function createEventWithFrequency(calendar, title, startDate, frequency, description) {
+  const options = { description: description };
+  const validatedFrequency = validateFrequency(frequency);
+  
+  // Handle different frequency types
+  switch (validatedFrequency) {
+    case 'weekly':
+      return calendar.createEventSeries(title, startDate, startDate, 
+        CalendarApp.newRecurrence().addWeeklyRule(), options);
+    
+    case 'bi-weekly':
+      return calendar.createEventSeries(title, startDate, startDate, 
+        CalendarApp.newRecurrence().addWeeklyRule().interval(2), options);
+    
+    case 'monthly':
+      return calendar.createEventSeries(title, startDate, startDate, 
+        CalendarApp.newRecurrence().addMonthlyRule(), options);
+    
+    case 'yearly':
+      return calendar.createEventSeries(title, startDate, startDate, 
+        CalendarApp.newRecurrence().addYearlyRule(), options);
+    
+    case 'once':
+    default:
+      // Create single all-day event
+      return calendar.createAllDayEvent(title, startDate, options);
+  }
+}
+
+// Helper function to validate and normalize frequency values
+function validateFrequency(frequency) {
+  if (!frequency || typeof frequency !== 'string') {
+    return 'once';
+  }
+  
+  const normalizedFrequency = frequency.toLowerCase().trim();
+  
+  // Map various input formats to standard values
+  const frequencyMap = {
+    'once': 'once',
+    'single': 'once',
+    'one-time': 'once',
+    'weekly': 'weekly',
+    'week': 'weekly',
+    'every week': 'weekly',
+    'bi-weekly': 'bi-weekly',
+    'biweekly': 'bi-weekly',
+    'every 2 weeks': 'bi-weekly',
+    'every two weeks': 'bi-weekly',
+    'monthly': 'monthly',
+    'month': 'monthly',
+    'every month': 'monthly',
+    'yearly': 'yearly',
+    'annual': 'yearly',
+    'annually': 'yearly',
+    'year': 'yearly',
+    'every year': 'yearly'
+  };
+  
+  return frequencyMap[normalizedFrequency] || 'once';
 }
 
 // Helper function to preserve manual additions while updating generated content
