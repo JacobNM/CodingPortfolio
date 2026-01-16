@@ -92,8 +92,14 @@ class BabyNameGame:
     
     def _load_names_from_file(self) -> bool:
         """Load names from a text file."""
+        print("\nEnter the file path (or press Enter for default 'names.txt'):")
+        file_path = input("File path: ").strip()
+        
+        if not file_path:
+            file_path = "names.txt"
+        
         try:
-            with open("names.txt", "r") as file:
+            with open(file_path, "r") as file:
                 for line in file:
                     name = line.strip()
                     if name and name not in self.names:
@@ -101,10 +107,55 @@ class BabyNameGame:
                         self.scores[name] = 0
             
             if len(self.names) < 3:
-                print("File contains fewer than 3 names. Please add more names to the file.")
+                print(f"File '{file_path}' contains fewer than 3 names. Please add more names to the file.")
                 return False
+            
+            print(f"✅ Successfully loaded {len(self.names)} names from '{file_path}'")
             return True
+            
         except FileNotFoundError:
+            print(f"❌ File '{file_path}' not found.")
+            
+            # Offer to create the file if it's the default names.txt
+            if file_path == "names.txt":
+                create_file = input("Would you like to create 'names.txt' with some example names? (y/n): ").strip().lower()
+                if create_file in ['y', 'yes']:
+                    return self._create_sample_names_file()
+            
+            return False
+        except Exception as e:
+            print(f"❌ Error reading file '{file_path}': {e}")
+            return False
+    
+    def _create_sample_names_file(self) -> bool:
+        """Create a sample names.txt file with example names."""
+        sample_names = [
+            "Emma", "Olivia", "Sophia", "Isabella", "Ava",
+            "Liam", "Noah", "William", "James", "Oliver",
+            "Charlotte", "Amelia", "Harper", "Evelyn", "Abigail",
+            "Benjamin", "Lucas", "Henry", "Alexander", "Mason"
+        ]
+        
+        try:
+            with open("names.txt", "w") as file:
+                for name in sample_names:
+                    file.write(f"{name}\n")
+            
+            print("✅ Created 'names.txt' with 20 sample names!")
+            print("You can edit this file to add your own names before playing.")
+            
+            use_samples = input("Would you like to use these sample names for now? (y/n): ").strip().lower()
+            if use_samples in ['y', 'yes']:
+                for name in sample_names:
+                    self.names.append(name)
+                    self.scores[name] = 0
+                return True
+            else:
+                print("Please edit 'names.txt' with your preferred names and try again.")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Could not create sample file: {e}")
             return False
     
     def save_names_to_file(self) -> None:
