@@ -230,15 +230,16 @@ class BabyNameGame:
             # Randomly select 2 names
             return random.sample(available_names, 2)
     
-    def display_names(self, names: List[str]) -> None:
+    def display_names(self, names: List[str], show_header: bool = True) -> None:
         """Display the current set of names."""
-        print("\n" + "=" * 40)
-        if self.is_two_player:
-            current_player_name = self.player_names[self.current_player - 1]
-            print(f"Round {self.round_number} - {current_player_name}'s Turn")
-        else:
-            print(f"Round {self.round_number}")
-        print("=" * 40)
+        if show_header:
+            print("\n" + "=" * 40)
+            if self.is_two_player:
+                current_player_name = self.player_names[self.current_player - 1]
+                print(f"Round {self.round_number} - {current_player_name}'s Turn")
+            else:
+                print(f"Round {self.round_number}")
+            print("=" * 40)
         print("Choose from these names:")
         for i, name in enumerate(names, 1):
             print(f"{i}. {name}")
@@ -747,9 +748,9 @@ class BabyNameGame:
             for i, pairing in enumerate(round_pairings, 1):
                 if len(pairing) == 2:
                     print(f"\n{'=' * 40}")
-                    print(f"Round {i}")
+                    print(f"Pairing {i}")
                     print(f"{'=' * 40}")
-                    self.display_names(pairing)  # This displays the numbered list
+                    self.display_names(pairing, show_header=False)  # Don't show duplicate header
                     
                     first_choice, second_choice = self.get_user_rankings(pairing)
                     self.update_scores(first_choice, second_choice)
@@ -849,15 +850,20 @@ class BabyNameGame:
         if self.total_rounds_completed > 1:
             tied_names = self._get_tied_names_for_highest_score()
             if len(tied_names) > 1:
-                # Focus primarily on tied names but include some others for comparison
-                priority_names = tied_names.copy()
-                other_names = [name for name in self.names if name not in tied_names]
-                random.shuffle(priority_names)
-                random.shuffle(other_names)
-                
-                # Use mostly tied names, with some others mixed in
-                available_names = priority_names + other_names[:len(tied_names)//2]
-                random.shuffle(available_names)
+                # If there are exactly 2 tied names, only use those 2
+                if len(tied_names) == 2:
+                    available_names = tied_names.copy()
+                    random.shuffle(available_names)
+                # If there are 3+ tied names, focus on them but include some others for comparison
+                else:
+                    priority_names = tied_names.copy()
+                    other_names = [name for name in self.names if name not in tied_names]
+                    random.shuffle(priority_names)
+                    random.shuffle(other_names)
+                    
+                    # Use mostly tied names, with some others mixed in
+                    available_names = priority_names + other_names[:len(tied_names)//2]
+                    random.shuffle(available_names)
             else:
                 available_names = self.names.copy()
                 random.shuffle(available_names)
@@ -871,8 +877,8 @@ class BabyNameGame:
             pairings.append(pair)
             available_names = available_names[2:]
         
-        # Handle odd name
-        if available_names:
+        # Handle odd name only if we're not in a focused 2-name comparison
+        if available_names and len(self._get_tied_names_for_highest_score()) != 2:
             pairings.append([available_names[0]])
         
         return pairings
