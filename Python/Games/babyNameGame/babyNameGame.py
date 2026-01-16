@@ -236,7 +236,7 @@ class BabyNameGame:
             print("\n" + "=" * 40)
             if self.is_two_player:
                 current_player_name = self.player_names[self.current_player - 1]
-                print(f"Round {self.round_number} - {current_player_name}'s Turn")
+                print(f"Round {self.total_rounds_completed} - {current_player_name}'s Turn")
             else:
                 print(f"Round {self.round_number}")
             print("=" * 40)
