@@ -326,6 +326,15 @@ class BabyNameGame:
             print("FINAL RESULTS")
         print("🏆" * 20)
         
+        # Check for tiebreakers before showing results
+        if self.is_two_player:
+            tiebreaker_needed = self._check_two_player_tiebreaker()
+        else:
+            tiebreaker_needed = self._check_single_player_tiebreaker()
+        
+        if tiebreaker_needed:
+            return  # Results will be shown after tiebreaker
+        
         if self.is_two_player:
             self._display_two_player_results()
         else:
@@ -364,6 +373,40 @@ class BabyNameGame:
         print(f"   • Total rounds played: {total_rounds}")
         print(f"   • Names evaluated: {len(self.names)}")
         print(f"   • Average score: {sum(self.scores.values()) / len(self.scores):.1f}")
+    
+    def _check_single_player_tiebreaker(self) -> bool:
+        """Check if tiebreaker is needed for single player and handle it."""
+        sorted_names = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
+        
+        if len(sorted_names) < 2:
+            return False
+        
+        # Find all names tied for highest score
+        highest_score = sorted_names[0][1]
+        tied_names = [name for name, score in sorted_names if score == highest_score]
+        
+        if len(tied_names) > 1 and highest_score > 0:
+            print(f"\n🤝 TIE DETECTED! {len(tied_names)} names are tied for the highest score ({highest_score} points):")
+            for name in tied_names:
+                print(f"   • {name}")
+            
+            proceed = input(f"\nWould you like a tiebreaker round to choose your true favorite? (y/n): ").strip().lower()
+            if proceed in ['y', 'yes']:
+                winner, runner_up = self._run_tiebreaker(tied_names)
+                self._update_tiebreaker_scores(winner, runner_up, highest_score)
+                
+                print(f"\n🎉 Tiebreaker complete! Final results:")
+                self._display_single_player_results()
+                
+                # Offer export after tiebreaker
+                export = input(f"\n💾 Export results to spreadsheet (CSV)? (y/n): ").strip().lower()
+                if export in ['y', 'yes']:
+                    final_sorted = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
+                    self.export_to_csv(final_sorted)
+                
+                return True
+        
+        return False
     
     def _display_two_player_results(self) -> None:
         """Display results for two player mode."""
@@ -421,6 +464,106 @@ class BabyNameGame:
         print(f"   • Names evaluated: {len(self.names)}")
         print(f"   • {self.player_names[0]} average score: {sum(self.player_scores[self.player_names[0]].values()) / len(self.names):.1f}")
         print(f"   • {self.player_names[1]} average score: {sum(self.player_scores[self.player_names[1]].values()) / len(self.names):.1f}")
+    
+    def _check_two_player_tiebreaker(self) -> bool:
+        """Check if tiebreaker is needed for two player mode and handle it."""
+        tiebreaker_ran = False
+        players_with_ties = []
+        
+        # First, check which players have ties
+        for i, player_name in enumerate(self.player_names):
+            player_scores = self.player_scores[player_name]
+            sorted_player_scores = sorted(player_scores.items(), key=lambda x: x[1], reverse=True)
+            
+            if len(sorted_player_scores) >= 2:
+                highest_score = sorted_player_scores[0][1]
+                tied_names = [name for name, score in sorted_player_scores if score == highest_score]
+                
+                if len(tied_names) > 1 and highest_score > 0:
+                    players_with_ties.append((i, player_name, tied_names, highest_score))
+        
+        # Now handle tiebreakers for each player
+        for idx, (player_index, player_name, tied_names, highest_score) in enumerate(players_with_ties):
+            print(f"\n🤝 {player_name.upper()} TIE DETECTED!")
+            print(f"{len(tied_names)} names are tied for {player_name}'s highest score ({highest_score} points):")
+            for name in tied_names:
+                print(f"   • {name}")
+            
+            proceed = input(f"\n{player_name}, would you like a tiebreaker round to choose your true favorite? (y/n): ").strip().lower()
+            if proceed in ['y', 'yes']:
+                print(f"\n👤 {player_name}'s Tiebreaker Round")
+                winner, runner_up = self._run_individual_tiebreaker(tied_names, player_name)
+                self._update_individual_tiebreaker_scores(winner, runner_up, player_name, highest_score)
+                tiebreaker_ran = True
+                print(f"✅ {player_name}'s tiebreaker complete!")
+                
+                # Clear screen after first player's tiebreaker if there's a second player with ties
+                if idx == 0 and len(players_with_ties) > 1:
+                    input("\nPress Enter to continue to next player's tiebreaker...")
+                    os.system('cls' if os.name == 'nt' else 'clear')
+        
+        if tiebreaker_ran:
+            print(f"\n🎉 All tiebreakers complete! Final results:")
+            self._display_two_player_results()
+            
+            # Offer export after tiebreaker
+            export = input(f"\n💾 Export results to spreadsheet (CSV)? (y/n): ").strip().lower()
+            if export in ['y', 'yes']:
+                self.export_two_player_csv()
+            
+            return True
+        
+        return False
+    
+    def _run_tiebreaker(self, tied_names: List[str]) -> Tuple[str, str]:
+        """Run a tiebreaker round for single player."""
+        print(f"\n🥊 TIEBREAKER ROUND")
+        print("=" * 20)
+        print(f"Choose from these {len(tied_names)} tied names:")
+        
+        for i, name in enumerate(tied_names, 1):
+            print(f"{i}. {name}")
+        
+        first_choice, second_choice = self.get_user_rankings(tied_names)
+        return first_choice, second_choice
+    
+    def _run_joint_tiebreaker(self, tied_names: List[str]) -> Tuple[str, str]:
+        """Run an individual tiebreaker round for a specific player."""
+        # This method is now replaced by _run_individual_tiebreaker
+        # Keeping for backwards compatibility but redirecting
+        return self._run_individual_tiebreaker(tied_names, "Player")
+    
+    def _run_individual_tiebreaker(self, tied_names: List[str], player_name: str) -> Tuple[str, str]:
+        """Run a tiebreaker round for an individual player."""
+        print(f"\n🥊 {player_name.upper()}'S TIEBREAKER ROUND")
+        print("=" * 40)
+        print(f"{player_name}, choose from these {len(tied_names)} tied names:")
+        
+        for i, name in enumerate(tied_names, 1):
+            print(f"{i}. {name}")
+        
+        first_choice, second_choice = self.get_user_rankings(tied_names)
+        return first_choice, second_choice
+    
+    def _update_tiebreaker_scores(self, winner: str, runner_up: str, original_high_score: int) -> None:
+        """Update scores after single player tiebreaker."""
+        # Give winner a higher score than the original tie
+        self.scores[winner] = original_high_score + 2
+        if runner_up:
+            self.scores[runner_up] = original_high_score + 1
+    
+    def _update_combined_tiebreaker_scores(self, winner: str, runner_up: str, tied_names: List[str]) -> None:
+        """Update scores after two player tiebreaker by adding bonus points."""
+        # This method is now replaced by _update_individual_tiebreaker_scores
+        # Keeping for backwards compatibility
+        pass
+    
+    def _update_individual_tiebreaker_scores(self, winner: str, runner_up: str, player_name: str, original_high_score: int) -> None:
+        """Update scores after individual player tiebreaker."""
+        # Give winner a higher score than the original tie for this specific player
+        self.player_scores[player_name][winner] = original_high_score + 2
+        if runner_up:
+            self.player_scores[player_name][runner_up] = original_high_score + 1
     
     def export_to_csv(self, sorted_names: List[Tuple[str, int]]) -> None:
         """Export game results to a CSV file."""
