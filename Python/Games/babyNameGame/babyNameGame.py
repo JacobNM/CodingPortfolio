@@ -792,19 +792,57 @@ class BabyNameGame:
             self.total_rounds_completed += 1
             print(f"\n🎯 Round {self.total_rounds_completed} - Both Players")
             
-            # Shuffle names for this round's pairings
-            random.shuffle(self.names)
-            round_pairings = self._get_round_pairings()
+            # Check which players actually need to play (have ties)
+            players_needing_rounds = []
+            for player_num in [1, 2]:
+                player_name = self.player_names[player_num - 1]
+                tied_names = self._get_tied_names_for_player(player_name)
+                if self.total_rounds_completed == 1 or len(tied_names) > 1:
+                    players_needing_rounds.append((player_num, player_name, tied_names))
             
-            # Player 1's turn
-            self._play_player_round(1, round_pairings)
+            # If no players need rounds, we're done
+            if not players_needing_rounds:
+                print("No more ties to resolve!")
+                break
             
-            # Clear screen and switch to Player 2
-            input(f"\n🔄 {self.player_names[0]}'s turn complete. Press Enter for {self.player_names[1]}'s turn...")
-            os.system('cls' if os.name == 'nt' else 'clear')
-            
-            # Player 2's turn with same pairings
-            self._play_player_round(2, round_pairings)
+            # Each player with ties gets their own pairings
+            for i, (player_num, player_name, tied_names) in enumerate(players_needing_rounds):
+                
+                # Show what this player is working on
+                if self.total_rounds_completed > 1:
+                    print(f"\n🎯 {player_name}'s tied names: {', '.join(tied_names)}")
+                    print(f"This round will focus on breaking {player_name}'s ties!")
+                    
+                    # Use only tied names if exactly 2, otherwise mix in some others
+                    if len(tied_names) == 2:
+                        available_names = tied_names.copy()
+                    else:
+                        other_names = [name for name in self.names if name not in tied_names]
+                        random.shuffle(other_names)
+                        available_names = tied_names + other_names[:len(tied_names)//2]
+                    random.shuffle(available_names)
+                else:
+                    available_names = self.names.copy()
+                    random.shuffle(available_names)
+                
+                # Create pairings for this player
+                pairings = []
+                while len(available_names) >= 2:
+                    pair = available_names[:2]
+                    pairings.append(pair)
+                    available_names = available_names[2:]
+                
+                # Handle odd name only if not in focused 2-name comparison
+                if available_names and len(tied_names) != 2:
+                    pairings.append([available_names[0]])
+                
+                self._play_player_round(player_num, pairings)
+                
+                # Clear screen between players (only if there's another player coming)
+                if i < len(players_needing_rounds) - 1:
+                    next_player = players_needing_rounds[i + 1][1]
+                    input(f"\n🔄 {player_name}'s turn complete. Press Enter for {next_player}'s turn...")
+                    os.system('cls' if os.name == 'nt' else 'clear')
             
             # Show current standings
             print(f"\n📈 Round {self.total_rounds_completed} Complete!")
@@ -818,6 +856,36 @@ class BabyNameGame:
             
             if continue_round not in ['y', 'yes']:
                 break
+    
+    def _get_tied_names_for_player(self, player_name: str) -> List[str]:
+        """Get names tied for highest score for a specific player."""
+        if not self.is_two_player or player_name not in self.player_scores:
+            return []
+        
+        player_scores = self.player_scores[player_name]
+        if not player_scores:
+            return []
+            
+        sorted_scores = sorted(player_scores.items(), key=lambda x: x[1], reverse=True)
+        if sorted_scores:
+            highest_score = sorted_scores[0][1]
+            return [name for name, score in sorted_scores if score == highest_score]
+        return []
+    
+    def _get_tied_names_for_player(self, player_name: str) -> List[str]:
+        """Get names tied for highest score for a specific player."""
+        if not self.is_two_player or player_name not in self.player_scores:
+            return []
+        
+        player_scores = self.player_scores[player_name]
+        if not player_scores:
+            return []
+            
+        sorted_scores = sorted(player_scores.items(), key=lambda x: x[1], reverse=True)
+        if sorted_scores:
+            highest_score = sorted_scores[0][1]
+            return [name for name, score in sorted_scores if score == highest_score]
+        return []
     
     def _get_tied_names_for_highest_score(self) -> List[str]:
         """Get names tied for the highest score."""
@@ -843,6 +911,46 @@ class BabyNameGame:
                 highest_score = sorted_names[0][1]
                 return [name for name, score in sorted_names if score == highest_score]
             return []
+    
+    def _get_round_pairings_for_player(self, player_name: str) -> List[List[str]]:
+        """Get pairings for a specific player, prioritizing their tied names."""
+        # After first round, prioritize names tied for highest score for this player
+        if self.total_rounds_completed > 1:
+            tied_names = self._get_tied_names_for_player(player_name)
+            if len(tied_names) > 1:
+                # If there are exactly 2 tied names, only use those 2
+                if len(tied_names) == 2:
+                    available_names = tied_names.copy()
+                    random.shuffle(available_names)
+                # If there are 3+ tied names, focus on them but include some others for comparison
+                else:
+                    priority_names = tied_names.copy()
+                    other_names = [name for name in self.names if name not in tied_names]
+                    random.shuffle(priority_names)
+                    random.shuffle(other_names)
+                    
+                    # Use mostly tied names, with some others mixed in
+                    available_names = priority_names + other_names[:len(tied_names)//2]
+                    random.shuffle(available_names)
+            else:
+                available_names = self.names.copy()
+                random.shuffle(available_names)
+        else:
+            available_names = self.names.copy()
+            random.shuffle(available_names)
+        
+        pairings = []
+        while len(available_names) >= 2:
+            pair = available_names[:2]
+            pairings.append(pair)
+            available_names = available_names[2:]
+        
+        # Handle odd name only if we're not in a focused 2-name comparison
+        player_tied_names = self._get_tied_names_for_player(player_name) if self.total_rounds_completed > 1 else []
+        if available_names and len(player_tied_names) != 2:
+            pairings.append([available_names[0]])
+        
+        return pairings
     
     def _get_round_pairings(self) -> List[List[str]]:
         """Get all pairings for a complete round, prioritizing tied names."""
@@ -885,8 +993,11 @@ class BabyNameGame:
     
     def _has_meaningful_ties(self) -> bool:
         """Check if there are meaningful ties that warrant another round."""
-        tied_names = self._get_tied_names_for_highest_score()
-        return len(tied_names) > 1
+        for player_name in self.player_names:
+            tied_names = self._get_tied_names_for_player(player_name)
+            if len(tied_names) > 1:
+                return True
+        return False
     
     def _show_round_standings(self) -> None:
         """Show current standings after a round in two-player mode."""
@@ -896,12 +1007,12 @@ class BabyNameGame:
             print(f"\n{player_name}'s current standings:")
             for i, (name, score) in enumerate(sorted_scores[:5], 1):
                 print(f"  {i}. {name} ({score} points)")
-        
-        # Show names tied for highest scores
-        tied_names = self._get_tied_names_for_highest_score()
-        if len(tied_names) > 1:
-            print(f"\n🔄 Names with ties for highest scores: {', '.join(tied_names)}")
-            print("Next round will focus on these names!")
+            
+            # Show this player's individual ties
+            tied_names = self._get_tied_names_for_player(player_name)
+            if len(tied_names) > 1:
+                highest_score = sorted_scores[0][1] if sorted_scores else 0
+                print(f"   🔄 {player_name}'s ties: {', '.join(tied_names)} ({highest_score} points each)")
     
     def _play_player_round(self, player_num: int, pairings: List[List[str]]) -> None:
         """Play one player's turn through all pairings."""
@@ -938,6 +1049,12 @@ class BabyNameGame:
             print(f"\n{player_name}:")
             for j, (name, score) in enumerate(sorted_scores[:5], 1):
                 print(f"  {j}. {name} ({score} points)")
+            
+            # Show this player's individual ties
+            tied_names = self._get_tied_names_for_player(player_name)
+            if len(tied_names) > 1:
+                highest_score = sorted_scores[0][1] if sorted_scores else 0
+                print(f"   🔄 {player_name}'s ties: {', '.join(tied_names)} ({highest_score} points each)")
     
     def _has_meaningful_ties(self) -> bool:
         """Check if there are ties that would benefit from another round."""
