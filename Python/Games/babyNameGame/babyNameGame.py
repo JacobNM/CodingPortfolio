@@ -25,6 +25,7 @@ class BabyNameGame:
         self.player_scores = {}  # For two player mode: {player_name: {name: score}}
         self.used_names = set()
         self.round_number = 0
+        self.total_rounds_completed = 0
         self.is_two_player = False
         self.current_player = 1
         self.player_names = ["Player 1", "Player 2"]
@@ -34,8 +35,8 @@ class BabyNameGame:
         print("🍼 Welcome to the Baby Name Ranking Game! 🍼")
         print("=" * 50)
         print("This game will help you and your partner rank baby names.")
-        print("You'll see 3 names at a time and pick your 1st and 2nd favorites.")
-        print("Names get points: 3 for 1st place, 1 for 2nd place, 0 for 3rd place")
+        print("You'll see 2 names at a time and pick your favorite.")
+        print("Names get points: 1 for winner, 0 for loser")
         print()
         
         # Ask for game mode
@@ -84,8 +85,8 @@ class BabyNameGame:
         while True:
             name = input(f"Name #{len(self.names) + 1}: ").strip()
             if not name:
-                if len(self.names) < 3:
-                    print("Please enter at least 3 names to play the game.")
+                if len(self.names) < 2:
+                    print("Please enter at least 2 names to play the game.")
                     continue
                 else:
                     break
@@ -119,8 +120,8 @@ class BabyNameGame:
                                 self.player_scores[player] = {}
                             self.player_scores[player][name] = 0
         
-        if len(self.names) < 3:
-            print("Please enter at least 3 names. Let's try again.")
+        if len(self.names) < 2:
+            print("Please enter at least 2 names. Let's try again.")
             self.names.clear()
             self.scores.clear()
             self._input_names_bulk()
@@ -141,8 +142,8 @@ class BabyNameGame:
                         self.names.append(name)
                         self.scores[name] = 0
             
-            if len(self.names) < 3:
-                print(f"File '{file_path}' contains fewer than 3 names. Please add more names to the file.")
+            if len(self.names) < 2:
+                print(f"File '{file_path}' contains fewer than 2 names. Please add more names to the file.")
                 return False
             
             print(f"✅ Successfully loaded {len(self.names)} names from '{file_path}'")
@@ -216,21 +217,18 @@ class BabyNameGame:
         except Exception as e:
             print(f"Could not save names: {e}")
     
-    def get_next_three_names(self) -> List[str]:
-        """Get the next 3 names for ranking (or 4 if exactly 4 remain)."""
+    def get_next_two_names(self) -> List[str]:
+        """Get the next 2 names for ranking."""
         available_names = [name for name in self.names if name not in self.used_names]
         
         if len(available_names) == 0:
             return []
-        elif len(available_names) == 4:
-            # Include all 4 names in this round to avoid a final round with just 1 name
-            return available_names.copy()
-        elif len(available_names) < 3:
-            # Return all remaining names (1 or 2)
+        elif len(available_names) == 1:
+            # Return the last remaining name
             return available_names.copy()
         else:
-            # Randomly select 3 names
-            return random.sample(available_names, 3)
+            # Randomly select 2 names
+            return random.sample(available_names, 2)
     
     def display_names(self, names: List[str]) -> None:
         """Display the current set of names."""
@@ -246,33 +244,32 @@ class BabyNameGame:
             print(f"{i}. {name}")
     
     def get_user_rankings(self, names: List[str]) -> Tuple[str, str]:
-        """Get user's 1st and 2nd choice from the names."""
+        """Get user's choice from the names."""
         while True:
             try:
-                print(f"\nFrom the {len(names)} names above:")
-                first_choice = int(input("Enter the number of your FAVORITE name: ")) - 1
-                
-                if first_choice < 0 or first_choice >= len(names):
-                    print(f"Please enter a number between 1 and {len(names)}")
-                    continue
-                
-                if len(names) > 1:
-                    print("Enter the number of your SECOND favorite name:")
-                    if len(names) == 4:
-                        print("(Note: This round has 4 names to avoid a single-name final round)")
-                    second_choice = int(input("Second favorite: ")) - 1
+                if len(names) == 1:
+                    print(f"\nOnly 1 name remaining: {names[0]}")
+                    print("This name automatically gets 1 point.")
+                    return names[0], None
+                elif len(names) == 2:
+                    print(f"\nWhich name do you prefer?")
+                    choice = int(input("Enter the number of your FAVORITE name: ")) - 1
                     
-                    if second_choice < 0 or second_choice >= len(names):
+                    if choice < 0 or choice >= len(names):
                         print(f"Please enter a number between 1 and {len(names)}")
                         continue
                     
-                    if second_choice == first_choice:
-                        print("Please choose two different names.")
-                        continue
+                    return names[choice], None
                 else:
-                    second_choice = -1  # No second choice if only one name
-                
-                return names[first_choice], names[second_choice] if second_choice != -1 else None
+                    # Handle cases with more than 2 names (like tiebreakers)
+                    print(f"\nFrom the {len(names)} names above:")
+                    choice = int(input("Enter the number of your FAVORITE name: ")) - 1
+                    
+                    if choice < 0 or choice >= len(names):
+                        print(f"Please enter a number between 1 and {len(names)}")
+                        continue
+                    
+                    return names[choice], None
                 
             except (ValueError, IndexError):
                 print(f"Please enter a valid number between 1 and {len(names)}")
@@ -281,13 +278,9 @@ class BabyNameGame:
         """Update scores based on user choices."""
         if self.is_two_player:
             current_player_name = self.player_names[self.current_player - 1]
-            self.player_scores[current_player_name][first_choice] += 3
-            if second_choice:
-                self.player_scores[current_player_name][second_choice] += 1
+            self.player_scores[current_player_name][first_choice] += 1  # 1 point for winner
         else:
-            self.scores[first_choice] += 3  # 3 points for first place
-            if second_choice:
-                self.scores[second_choice] += 1  # 1 point for second place
+            self.scores[first_choice] += 1  # 1 point for winner
     
     def mark_names_as_used(self, names: List[str]) -> None:
         """Mark names as used so they won't appear again."""
@@ -309,11 +302,7 @@ class BabyNameGame:
         self.mark_names_as_used(current_names)
         
         player_name = self.player_names[self.current_player - 1] if self.is_two_player else "You"
-        print(f"\n✅ {player_name} chose '{first_choice}' as #1", end="")
-        if second_choice:
-            print(f" and '{second_choice}' as #2")
-        else:
-            print()
+        print(f"\n✅ {player_name} chose '{first_choice}' as the winner")
         
         return True  # Continue game
     
@@ -458,10 +447,10 @@ class BabyNameGame:
             print(f"   ⚠️  {self.player_names[1]} loves but {self.player_names[0]} doesn't: {', '.join(p2_high_p1_low)}")
         
         # Statistics
-        total_rounds = self.round_number // 2  # Each name evaluated by both players
         print(f"\n📊 Game Statistics:")
-        print(f"   • Total rounds per player: {total_rounds}")
+        print(f"   • Total rounds completed: {self.total_rounds_completed}")
         print(f"   • Names evaluated: {len(self.names)}")
+        print(f"   • Total pairings per player: {self.total_rounds_completed * len(self.names) // 2}")
         print(f"   • {self.player_names[0]} average score: {sum(self.player_scores[self.player_names[0]].values()) / len(self.names):.1f}")
         print(f"   • {self.player_names[1]} average score: {sum(self.player_scores[self.player_names[1]].values()) / len(self.names):.1f}")
     
@@ -548,9 +537,7 @@ class BabyNameGame:
     def _update_tiebreaker_scores(self, winner: str, runner_up: str, original_high_score: int) -> None:
         """Update scores after single player tiebreaker."""
         # Give winner a higher score than the original tie
-        self.scores[winner] = original_high_score + 2
-        if runner_up:
-            self.scores[runner_up] = original_high_score + 1
+        self.scores[winner] = original_high_score + 1
     
     def _update_combined_tiebreaker_scores(self, winner: str, runner_up: str, tied_names: List[str]) -> None:
         """Update scores after two player tiebreaker by adding bonus points."""
@@ -561,9 +548,7 @@ class BabyNameGame:
     def _update_individual_tiebreaker_scores(self, winner: str, runner_up: str, player_name: str, original_high_score: int) -> None:
         """Update scores after individual player tiebreaker."""
         # Give winner a higher score than the original tie for this specific player
-        self.player_scores[player_name][winner] = original_high_score + 2
-        if runner_up:
-            self.player_scores[player_name][runner_up] = original_high_score + 1
+        self.player_scores[player_name][winner] = original_high_score + 1
     
     def export_to_csv(self, sorted_names: List[Tuple[str, int]]) -> None:
         """Export game results to a CSV file."""
@@ -712,8 +697,8 @@ class BabyNameGame:
         # Load names
         self.load_names_from_input()
         
-        if len(self.names) < 3:
-            print("You need at least 3 names to play. Please restart and add more names.")
+        if len(self.names) < 2:
+            print("You need at least 2 names to play. Please restart and add more names.")
             return
         
         print(f"\n🎮 Starting game with {len(self.names)} names!")
@@ -750,53 +735,220 @@ class BabyNameGame:
             self.play_game()
     
     def _play_single_player_game(self) -> None:
-        """Play the game in single player mode."""
-        while self.play_round():
-            remaining = len(self.names) - len(self.used_names)
-            if remaining > 0:
-                input(f"\nPress Enter to continue to next round... ({remaining} names remaining)")
+        """Play the game in single player mode with multiple rounds."""
+        while True:
+            self.total_rounds_completed += 1
+            print(f"\n🎮 Starting Round {self.total_rounds_completed}")
+            
+            # Get pairings for this round (prioritizes tied names after first round)
+            round_pairings = self._get_round_pairings()
+            
+            # Play through all pairings
+            for i, pairing in enumerate(round_pairings, 1):
+                if len(pairing) == 2:
+                    print(f"\n{'=' * 40}")
+                    print(f"Round {i}")
+                    print(f"{'=' * 40}")
+                    self.display_names(pairing)  # This displays the numbered list
+                    
+                    first_choice, second_choice = self.get_user_rankings(pairing)
+                    self.update_scores(first_choice, second_choice)
+                    
+                    print(f"\n✅ You chose '{first_choice}' as the winner")
+                    
+                    # Pause between pairings if there are more
+                    if i < len(round_pairings):
+                        input(f"\nPress Enter to continue... ({len(round_pairings) - i} pairings remaining)")
+                elif len(pairing) == 1:
+                    # Handle odd name by giving it a small bonus
+                    print(f"\n📝 '{pairing[0]}' gets a small bonus for making it to the final pairing!")
+                    self.scores[pairing[0]] = self.scores.get(pairing[0], 0) + 0.5
+            
+            # Show current standings
+            print(f"\n📈 Round {self.total_rounds_completed} Complete!")
+            sorted_names = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
+            print("Current standings:")
+            for i, (name, score) in enumerate(sorted_names[:5], 1):
+                print(f"  {i}. {name} ({score} points)")
+            
+            # Show tied names
+            tied_names = self._get_tied_names_for_highest_score()
+            if len(tied_names) > 1:
+                print(f"\n🔄 Names tied for highest score ({sorted_names[0][1]} points): {', '.join(tied_names)}")
+                print("Next round will focus on these tied names!")
+                continue_round = input("Play another round to break ties? (y/n): ").strip().lower()
+            else:
+                continue_round = input(f"\n🔄 Play another round to refine rankings? (y/n): ").strip().lower()
+            
+            if continue_round not in ['y', 'yes']:
+                break
     
     def _play_two_player_game(self) -> None:
-        """Play the game in two player mode."""
-        print(f"\n🎮 {self.player_names[0]} will play first, then {self.player_names[1]} will play with the same names!")
+        """Play the game in two player mode with multiple rounds."""
+        print(f"\n🎮 {self.player_names[0]} will play first, then {self.player_names[1]} will play with the same pairings!")
         
-        # Player 1's turn - play through all names
-        self.current_player = 1
-        self.used_names.clear()
-        self.round_number = 0
+        while True:
+            self.total_rounds_completed += 1
+            print(f"\n🎯 Round {self.total_rounds_completed} - Both Players")
+            
+            # Shuffle names for this round's pairings
+            random.shuffle(self.names)
+            round_pairings = self._get_round_pairings()
+            
+            # Player 1's turn
+            self._play_player_round(1, round_pairings)
+            
+            # Clear screen and switch to Player 2
+            input(f"\n🔄 {self.player_names[0]}'s turn complete. Press Enter for {self.player_names[1]}'s turn...")
+            os.system('cls' if os.name == 'nt' else 'clear')
+            
+            # Player 2's turn with same pairings
+            self._play_player_round(2, round_pairings)
+            
+            # Show current standings
+            print(f"\n📈 Round {self.total_rounds_completed} Complete!")
+            self._show_round_standings()
+            
+            # Ask for another round
+            if self._has_meaningful_ties():
+                continue_round = input("Play another round to break ties? (y/n): ").strip().lower()
+            else:
+                continue_round = input(f"\n🔄 Play another round to refine rankings? (y/n): ").strip().lower()
+            
+            if continue_round not in ['y', 'yes']:
+                break
+    
+    def _get_tied_names_for_highest_score(self) -> List[str]:
+        """Get names tied for the highest score."""
+        if self.is_two_player:
+            # For two-player, get union of names tied for highest in each player's scores
+            all_tied_names = set()
+            for player_name in self.player_names:
+                player_scores = self.player_scores[player_name]
+                if not player_scores:
+                    continue
+                sorted_scores = sorted(player_scores.items(), key=lambda x: x[1], reverse=True)
+                if sorted_scores:
+                    highest_score = sorted_scores[0][1]
+                    tied_names = [name for name, score in sorted_scores if score == highest_score]
+                    all_tied_names.update(tied_names)
+            return list(all_tied_names)
+        else:
+            # Single player mode
+            if not self.scores:
+                return []
+            sorted_names = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
+            if sorted_names:
+                highest_score = sorted_names[0][1]
+                return [name for name, score in sorted_names if score == highest_score]
+            return []
+    
+    def _get_round_pairings(self) -> List[List[str]]:
+        """Get all pairings for a complete round, prioritizing tied names."""
+        # After first round is completed, prioritize names tied for highest score
+        if self.total_rounds_completed > 1:
+            tied_names = self._get_tied_names_for_highest_score()
+            if len(tied_names) > 1:
+                # Focus primarily on tied names but include some others for comparison
+                priority_names = tied_names.copy()
+                other_names = [name for name in self.names if name not in tied_names]
+                random.shuffle(priority_names)
+                random.shuffle(other_names)
+                
+                # Use mostly tied names, with some others mixed in
+                available_names = priority_names + other_names[:len(tied_names)//2]
+                random.shuffle(available_names)
+            else:
+                available_names = self.names.copy()
+                random.shuffle(available_names)
+        else:
+            available_names = self.names.copy()
+            random.shuffle(available_names)
         
-        print(f"\n👤 {self.player_names[0]}'s Turn - Let's begin!")
+        pairings = []
+        while len(available_names) >= 2:
+            pair = available_names[:2]
+            pairings.append(pair)
+            available_names = available_names[2:]
+        
+        # Handle odd name
+        if available_names:
+            pairings.append([available_names[0]])
+        
+        return pairings
+    
+    def _has_meaningful_ties(self) -> bool:
+        """Check if there are meaningful ties that warrant another round."""
+        tied_names = self._get_tied_names_for_highest_score()
+        return len(tied_names) > 1
+    
+    def _show_round_standings(self) -> None:
+        """Show current standings after a round in two-player mode."""
+        for player_name in self.player_names:
+            player_scores = self.player_scores[player_name]
+            sorted_scores = sorted(player_scores.items(), key=lambda x: x[1], reverse=True)
+            print(f"\n{player_name}'s current standings:")
+            for i, (name, score) in enumerate(sorted_scores[:5], 1):
+                print(f"  {i}. {name} ({score} points)")
+        
+        # Show names tied for highest scores
+        tied_names = self._get_tied_names_for_highest_score()
+        if len(tied_names) > 1:
+            print(f"\n🔄 Names with ties for highest scores: {', '.join(tied_names)}")
+            print("Next round will focus on these names!")
+    
+    def _play_player_round(self, player_num: int, pairings: List[List[str]]) -> None:
+        """Play one player's turn through all pairings."""
+        self.current_player = player_num
+        player_name = self.player_names[player_num - 1]
+        
+        print(f"\n👤 {player_name}'s Turn - Round {self.total_rounds_completed}")
         input("Press Enter when ready...")
         
-        while self.play_round():
-            remaining = len(self.names) - len(self.used_names)
-            if remaining > 0:
-                input(f"\nPress Enter to continue to next round... ({remaining} names remaining)")
+        for i, names in enumerate(pairings, 1):
+            print(f"\n--- Pairing {i} of {len(pairings)} ---")
+            if len(names) == 1:
+                print(f"Only 1 name remaining: {names[0]}")
+                print("This name automatically gets 1 point.")
+                first_choice, second_choice = names[0], None
+            else:
+                self.display_names(names)
+                first_choice, second_choice = self.get_user_rankings(names)
+            
+            self.update_scores(first_choice, second_choice)
+            
+            player_name = self.player_names[self.current_player - 1]
+            print(f"\n✅ {player_name} chose '{first_choice}' as the winner")
+            
+            if i < len(pairings):
+                input(f"\nPress Enter to continue... ({len(pairings) - i} pairings remaining)")
+    
+    def _show_round_standings(self) -> None:
+        """Show current standings after a round."""
+        print("\nCurrent standings:")
         
-        # Reset for Player 2
-        self.used_names.clear()
-        self.round_number = 0
-        self.current_player = 2
-        
-        print(f"\n\n🔄 Time for {self.player_names[1]}'s turn!")
-        print(f"👤 {self.player_names[1]} will now rank the same names.")
-        input("Press Enter when ready...")
-        
-        # Clear screen so second player doesn't see first player's results
-        os.system('cls' if os.name == 'nt' else 'clear')
-        
-        # Reshuffle for different order
-        random.shuffle(self.names)
-        
-        while self.play_round():
-            remaining = len(self.names) - len(self.used_names)
-            if remaining > 0:
-                input(f"\nPress Enter to continue to next round... ({remaining} names remaining)")
+        for i, player_name in enumerate(self.player_names):
+            sorted_scores = sorted(self.player_scores[player_name].items(), key=lambda x: x[1], reverse=True)
+            print(f"\n{player_name}:")
+            for j, (name, score) in enumerate(sorted_scores[:5], 1):
+                print(f"  {j}. {name} ({score} points)")
+    
+    def _has_meaningful_ties(self) -> bool:
+        """Check if there are ties that would benefit from another round."""
+        for player_name in self.player_names:
+            sorted_scores = sorted(self.player_scores[player_name].items(), key=lambda x: x[1], reverse=True)
+            if len(sorted_scores) >= 2:
+                highest_score = sorted_scores[0][1]
+                tied_count = len([score for _, score in sorted_scores if score == highest_score])
+                if tied_count > 1:
+                    return True
+        return False
     
     def reset_game(self) -> None:
         """Reset game state for a new round."""
         self.used_names.clear()
         self.round_number = 0
+        self.total_rounds_completed = 0
         self.current_player = 1
         
         if self.is_two_player:
