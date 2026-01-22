@@ -11,7 +11,7 @@ readonly SCRIPT_NAME="$(basename "$0")"
 SOURCE_RESOURCE_GROUP=""
 DESTINATION_RESOURCE_GROUP=""
 SUBSCRIPTION_ID=""
-IMAGE_NAME_FILTER="2026"
+IMAGE_NAME_FILTER=""
 IS_DRY_RUN=false
 
 show_help() {
@@ -24,20 +24,20 @@ SYNOPSIS
 
 DESCRIPTION
     Moves managed VM images whose names contain a specified filter string from a source 
-    resource group to a destination resource group. By default, searches for images 
-    containing "2026" in the name. Images are MOVED (not copied) from source to destination.
+    resource group to a destination resource group. You must specify a filter string
+    to match image names. Images are MOVED (not copied) from source to destination.
 
 OPTIONS
     -s, --source <name>         Source resource group name (required)
     -d, --destination <name>    Destination resource group name (required)
     -u, --subscription <id>     Azure subscription ID (optional, uses current context if omitted)
-    -f, --filter <string>       String that must be contained in image names (default: "2026")
+    -f, --filter <string>       String that must be contained in image names (required)
     -n, --dry-run              Preview mode - show what would be moved without executing
     -h, --help                 Show this help message and exit
 
 EXAMPLES
     # Move all images containing "2026" from source to destination RG
-    ${SCRIPT_NAME} -s 2025-ImagePrep -d 2026-ImagePrep
+    ${SCRIPT_NAME} -s 2025-ImagePrep -d 2026-ImagePrep -f "2026"
 
     # Move images with custom filter in specific subscription
     ${SCRIPT_NAME} --source source-rg --destination dest-rg --subscription "12345678-1234-1234-1234-123456789012" --filter "ubuntu"
@@ -46,7 +46,7 @@ EXAMPLES
     ${SCRIPT_NAME} -s source-rg -d dest-rg -f "2026" --dry-run
 
     # Using mixed short and long options
-    ${SCRIPT_NAME} -s 2025-Images --destination 2026-Images -u "my-subscription-id" -n
+    ${SCRIPT_NAME} -s 2025-Images --destination 2026-Images -u "my-subscription-id" -f "2026" -n
 
 REQUIREMENTS
     - Azure CLI installed and authenticated (run 'az login')
@@ -56,7 +56,7 @@ REQUIREMENTS
 
 BACKWARD COMPATIBILITY
     For backward compatibility, positional arguments are still supported:
-    ${SCRIPT_NAME} <source_rg> <dest_rg> [subscription_id] [name_filter] [--dry-run|-n]
+    ${SCRIPT_NAME} <source_rg> <dest_rg> <filter_string> [subscription_id] [--dry-run|-n]
 
 EOF
 }
@@ -66,8 +66,8 @@ if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^- ]]; then
     # Backward compatibility: if first argument doesn't start with -, use positional parsing
     SOURCE_RESOURCE_GROUP="${1:-}"
     DESTINATION_RESOURCE_GROUP="${2:-}"
-    SUBSCRIPTION_ID="${3:-}"
-    IMAGE_NAME_FILTER="${4:-2026}"
+    IMAGE_NAME_FILTER="${3:-}"
+    SUBSCRIPTION_ID="${4:-}"
     if [[ "${5:-}" =~ ^(--dry-run|-n)$ ]]; then
         IS_DRY_RUN=true
     fi
@@ -146,6 +146,14 @@ fi
 # Validate required parameters
 if [[ -z "$SOURCE_RESOURCE_GROUP" || -z "$DESTINATION_RESOURCE_GROUP" ]]; then
     echo "Error: Both source (-s/--source) and destination (-d/--destination) resource groups are required." >&2
+    echo "" >&2
+    show_help
+    exit 1
+fi
+
+if [[ -z "$IMAGE_NAME_FILTER" ]]; then
+    echo "Error: Image name filter (-f/--filter) is required." >&2
+    echo "Specify a string that image names must contain (e.g., -f \"2026\")" >&2
     echo "" >&2
     show_help
     exit 1
