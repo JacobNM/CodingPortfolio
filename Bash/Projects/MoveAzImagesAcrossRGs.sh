@@ -13,6 +13,7 @@ DESTINATION_RESOURCE_GROUP=""
 SUBSCRIPTION_ID=""
 IMAGE_NAME_FILTER=""
 IS_DRY_RUN=false
+SKIP_CONFIRMATION=false
 
 show_help() {
     cat << EOF
@@ -33,6 +34,7 @@ OPTIONS
     -u, --subscription <id>     Azure subscription ID (optional, uses current context if omitted)
     -f, --filter <string>       String that must be contained in image names (required)
     -n, --dry-run              Preview mode - show what would be moved without executing
+    -y, --yes                  Skip confirmation prompt and proceed automatically
     -h, --help                 Show this help message and exit
 
 EXAMPLES
@@ -44,6 +46,9 @@ EXAMPLES
 
     # Preview what would be moved without executing
     ${SCRIPT_NAME} -s source-rg -d dest-rg -f "2026" --dry-run
+
+    # Skip confirmation and proceed automatically
+    ${SCRIPT_NAME} -s 2025-ImagePrep -d 2026-ImagePrep -f "2026" --yes
 
     # Using mixed short and long options
     ${SCRIPT_NAME} -s 2025-Images --destination 2026-Images -u "my-subscription-id" -f "2026" -n
@@ -123,6 +128,10 @@ else
                 ;;
             -n|--dry-run)
                 IS_DRY_RUN=true
+                shift
+                ;;
+            -y|--yes)
+                SKIP_CONFIRMATION=true
                 shift
                 ;;
             -h|--help)
@@ -279,18 +288,22 @@ if [[ "$IS_DRY_RUN" == true ]]; then
     exit 0
 fi
 
-# Confirmation prompt
+# Confirmation prompt (unless --yes flag is used)
 echo ""
-read -r -p "🤔 Do you want to proceed with moving ${#IMAGES_TO_MOVE[@]} image(s)? [y/N] " confirmation
-case "$confirmation" in
-    [yY]|[yY][eE][sS])
-        echo "✅ Proceeding with image move operations..."
-        ;;
-    *)
-        echo "❌ Operation cancelled by user"
-        exit 0
-        ;;
-esac
+if [[ "$SKIP_CONFIRMATION" == true ]]; then
+    echo "✅ Skipping confirmation (--yes flag used) - proceeding with image move operations..."
+else
+    read -r -p "🤔 Do you want to proceed with moving ${#IMAGES_TO_MOVE[@]} image(s)? [y/N] " confirmation
+    case "$confirmation" in
+        [yY]|[yY][eE][sS])
+            echo "✅ Proceeding with image move operations..."
+            ;;
+        *)
+            echo "❌ Operation cancelled by user"
+            exit 0
+            ;;
+    esac
+fi
 
 echo ""
 echo "🚀 Starting image move operations..."
@@ -332,155 +345,6 @@ for IMAGE_NAME in "${IMAGES_TO_MOVE[@]}"; do
         echo "   ❌ Failed to move image: $IMAGE_NAME" >&2
         FAILED_MOVES+=1
     fi
-done
-    
-    # Get destination resource group location for validation with error handling
-    if ! DEST_RG_LOCATION=$(az group show -n "$DESTINATION_RESOURCE_GROUP" --query location -o tsv 2>/dev/null); then
-        echo "   ❌ Error: Failed to get destination resource group location"
-        echo "      This may indicate the resource group no longer exists or access permissions have changed."
-        FAILED_COPIES+=1
-        continue
-    fi
-    
-    # Location mismatch guard - prevent cross-region copies
-    if [[ "$IMAGE_LOCATION" != "$DEST_RG_LOCATION" ]]; then
-        echo "   ❌ Error: Image location ($IMAGE_LOCATION) doesn't match destination resource group location ($DEST_RG_LOCATION)"
-        echo "      Azure doesn't support cross-region image copying. Both must be in the same region."
-        echo "      Skipping $IMAGE_NAME..."
-        SKIPPED_COPIES+=1
-        continue
-    fi
-    
-    # Use the same name in destination (modify this if you want different naming)
-    DESTINATION_IMAGE_NAME="$IMAGE_NAME"
-    
-    echo "   🎯 Source:      $SOURCE_RESOURCE_GROUP/$IMAGE_NAME"
-    echo "   🎯 Destination: $DESTINATION_RESOURCE_GROUP/$DESTINATION_IMAGE_NAME"
-    echo "   📍 Location:    $IMAGE_LOCATION"
-    echo "   ⏳ Copying..."
-    
-    # Perform the copy operation using Azure Compute Gallery as intermediary
-    # This approach works even when source managed disks are deleted
-    COPY_ERROR_OUTPUT=$(mktemp)
-    
-    # Get source image details including HyperV generation
-    echo "   🔍 Analyzing source image properties..."
-    if ! SOURCE_IMAGE_INFO=$(az image show -g "$SOURCE_RESOURCE_GROUP" -n "$IMAGE_NAME" --query '{hyperVGeneration: hyperVGeneration, osType: storageProfile.osDisk.osType}' -o json 2>/dev/null); then
-        echo "   ❌ Error: Failed to get source image properties"
-        FAILED_COPIES+=1
-        rm -f "$COPY_ERROR_OUTPUT"
-        continue
-    fi
-    
-    # Parse the source image properties
-    HYPERV_GENERATION=$(echo "$SOURCE_IMAGE_INFO" | jq -r '.hyperVGeneration // "V1"')
-    OS_TYPE=$(echo "$SOURCE_IMAGE_INFO" | jq -r '.osType // "Linux"')
-    
-    # Create temporary names for gallery resources
-    TEMP_GALLERY_NAME="tempImageCopy$(date +%s)$RANDOM"
-    TEMP_IMAGE_DEF_NAME="tempImageDef"
-    TEMP_IMAGE_VERSION="1.0.0"
-    
-    echo "   🎨 Creating temporary Azure Compute Gallery: $TEMP_GALLERY_NAME"
-    
-    # Create temporary Azure Compute Gallery
-    if ! az sig create \
-        --resource-group "$DESTINATION_RESOURCE_GROUP" \
-        --gallery-name "$TEMP_GALLERY_NAME" \
-        --location "$IMAGE_LOCATION" \
-        --only-show-errors 2>"$COPY_ERROR_OUTPUT"; then
-        echo "   ❌ Failed to create temporary gallery" >&2
-        if [[ -s "$COPY_ERROR_OUTPUT" ]]; then
-            echo "   📋 Gallery Creation Error:"
-            sed 's/^/      /' "$COPY_ERROR_OUTPUT" >&2
-        fi
-        FAILED_COPIES+=1
-        rm -f "$COPY_ERROR_OUTPUT"
-        continue
-    fi
-    
-    echo "   📋 Creating image definition in gallery (HyperV: $HYPERV_GENERATION, OS: $OS_TYPE)..."
-    
-    # Create image definition in the gallery with matching HyperV generation
-    if ! az sig image-definition create \
-        --resource-group "$DESTINATION_RESOURCE_GROUP" \
-        --gallery-name "$TEMP_GALLERY_NAME" \
-        --gallery-image-definition "$TEMP_IMAGE_DEF_NAME" \
-        --publisher "TempPublisher" \
-        --offer "TempOffer" \
-        --sku "TempSku" \
-        --os-type "$OS_TYPE" \
-        --os-state "Generalized" \
-        --hyper-v-generation "$HYPERV_GENERATION" \
-        --only-show-errors 2>"$COPY_ERROR_OUTPUT"; then
-        echo "   ❌ Failed to create image definition" >&2
-        if [[ -s "$COPY_ERROR_OUTPUT" ]]; then
-            echo "   📋 Image Definition Error:"
-            sed 's/^/      /' "$COPY_ERROR_OUTPUT" >&2
-        fi
-        # Clean up gallery
-        az sig delete --resource-group "$DESTINATION_RESOURCE_GROUP" --gallery-name "$TEMP_GALLERY_NAME" --yes --only-show-errors >/dev/null 2>&1 || true
-        FAILED_COPIES+=1
-        rm -f "$COPY_ERROR_OUTPUT"
-        continue
-    fi
-    
-    echo "   📷 Creating image version from source image..."
-    
-    # Create image version from the source managed image
-    if ! az sig image-version create \
-        --resource-group "$DESTINATION_RESOURCE_GROUP" \
-        --gallery-name "$TEMP_GALLERY_NAME" \
-        --gallery-image-definition "$TEMP_IMAGE_DEF_NAME" \
-        --gallery-image-version "$TEMP_IMAGE_VERSION" \
-        --managed-image "$SOURCE_IMAGE_ID" \
-        --replica-count 1 \
-        --only-show-errors 2>"$COPY_ERROR_OUTPUT"; then
-        echo "   ❌ Failed to create image version from source" >&2
-        if [[ -s "$COPY_ERROR_OUTPUT" ]]; then
-            echo "   📋 Image Version Creation Error:"
-            sed 's/^/      /' "$COPY_ERROR_OUTPUT" >&2
-        fi
-        # Clean up gallery
-        az sig delete --resource-group "$DESTINATION_RESOURCE_GROUP" --gallery-name "$TEMP_GALLERY_NAME" --yes --only-show-errors >/dev/null 2>&1 || true
-        FAILED_COPIES+=1
-        rm -f "$COPY_ERROR_OUTPUT"
-        continue
-    fi
-    
-    echo "   🖼️ Creating managed image from gallery version..."
-    
-    # Create managed image in destination from gallery image version
-    # Use the resource ID format directly from the created version
-    GALLERY_IMAGE_VERSION_ID="/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$DESTINATION_RESOURCE_GROUP/providers/Microsoft.Compute/galleries/$TEMP_GALLERY_NAME/images/$TEMP_IMAGE_DEF_NAME/versions/$TEMP_IMAGE_VERSION"
-    
-    if az image create \
-        --resource-group "$DESTINATION_RESOURCE_GROUP" \
-        --name "$DESTINATION_IMAGE_NAME" \
-        --location "$IMAGE_LOCATION" \
-        --os-type "$OS_TYPE" \
-        --source "$GALLERY_IMAGE_VERSION_ID" \
-        --only-show-errors 2>"$COPY_ERROR_OUTPUT"; then
-        
-        echo "   🧹 Cleaning up temporary gallery resources..."
-        # Clean up temporary gallery (this will also clean up image definition and version)
-        az sig delete --resource-group "$DESTINATION_RESOURCE_GROUP" --gallery-name "$TEMP_GALLERY_NAME" --yes --only-show-errors >/dev/null 2>&1 || true
-        
-        echo "   ✅ Successfully copied image via Azure Compute Gallery"
-        SUCCESSFUL_COPIES+=1
-    else
-        echo "   ❌ Failed to create managed image from gallery version" >&2
-        if [[ -s "$COPY_ERROR_OUTPUT" ]]; then
-            echo "   📋 Managed Image Creation Error:"
-            sed 's/^/      /' "$COPY_ERROR_OUTPUT" >&2
-        fi
-        # Clean up gallery
-        echo "   🧹 Cleaning up failed gallery resources..."
-        az sig delete --resource-group "$DESTINATION_RESOURCE_GROUP" --gallery-name "$TEMP_GALLERY_NAME" --yes --only-show-errors >/dev/null 2>&1 || true
-        FAILED_COPIES+=1
-    fi
-    
-    rm -f "$COPY_ERROR_OUTPUT"
 done
 
 echo ""
