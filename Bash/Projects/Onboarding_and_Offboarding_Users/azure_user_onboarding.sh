@@ -53,6 +53,59 @@ log() {
     echo -e "${timestamp} [${level}] ${message}" | tee -a "$LOG_FILE"
 }
 
+# Print section header with visual separator
+print_section() {
+    local title="$1"
+    local color="${2:-$BLUE}"
+    echo
+    echo -e "${color}╭─────────────────────────────────────────────────────╮${NC}"
+    echo -e "${color}│ $title${NC}"
+    echo -e "${color}╰─────────────────────────────────────────────────────╯${NC}"
+    echo
+}
+
+# Print operation status with progress indicator
+print_operation_status() {
+    local operation="$1"
+    local status="$2" # "start", "success", "skip", "error"
+    local message="${3:-}"
+    
+    case "$status" in
+        "start")
+            echo -e "${BLUE}🔄 Starting: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+        "success")
+            echo -e "${GREEN}✅ Completed: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+        "skip")
+            echo -e "${YELLOW}⏭️  Skipped: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+        "error")
+            echo -e "${RED}❌ Failed: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+    esac
+}
+
+# Print progress indicator
+print_progress() {
+    local current="$1"
+    local total="$2"
+    local operation="$3"
+    echo -e "${BLUE}[Step $current/$total] $operation${NC}"
+}
+
 # Print usage information
 usage() {
     cat << EOF
@@ -373,15 +426,16 @@ create_entra_id_user() {
 # Add user to Microsoft Entra ID groups
 add_to_entra_groups() {
     if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
-        log "INFO" "Skipping Entra ID group operations (--entra-operations not specified)"
+        print_operation_status "Microsoft Entra ID Group Assignment" "skip" "--entra-operations not specified"
         return 0
     fi
     
     if [[ ${#ENTRA_ID_GROUPS[@]} -eq 0 ]]; then
-        log "INFO" "No Microsoft Entra ID groups specified, skipping group assignments"
+        print_operation_status "Microsoft Entra ID Group Assignment" "skip" "No groups specified"
         return 0
     fi
     
+    print_operation_status "Microsoft Entra ID Group Assignment" "start" "Processing ${#ENTRA_ID_GROUPS[@]} group(s)"
     log "INFO" "Adding user to Microsoft Entra ID groups..."
     
     local user_id=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
@@ -412,15 +466,23 @@ add_to_entra_groups() {
             log "INFO" "Successfully added user to group: $group_name"
         fi
     done
+    
+    local success_groups=${#ENTRA_ID_GROUPS[@]}
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_operation_status "Microsoft Entra ID Group Assignment" "success" "[DRY RUN] Would add user to $success_groups groups"
+    else
+        print_operation_status "Microsoft Entra ID Group Assignment" "success" "Added user to groups successfully"
+    fi
 }
 
 # Assign RBAC roles
 assign_rbac_roles() {
     if [[ ${#RBAC_ROLES[@]} -eq 0 ]]; then
-        log "INFO" "No RBAC roles specified, skipping role assignments"
+        print_operation_status "RBAC Role Assignment" "skip" "No RBAC roles specified"
         return 0
     fi
     
+    print_operation_status "RBAC Role Assignment" "start" "Assigning ${#RBAC_ROLES[@]} role(s)"
     log "INFO" "Assigning RBAC roles..."
     
     local scope="/subscriptions/$SUBSCRIPTION_ID"
@@ -457,44 +519,57 @@ assign_rbac_roles() {
             fi
         fi
     done
+    
+    local success_roles=${#RBAC_ROLES[@]}
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_operation_status "RBAC Role Assignment" "success" "[DRY RUN] Would assign $success_roles roles"
+    else
+        print_operation_status "RBAC Role Assignment" "success" "Assigned $success_roles RBAC roles successfully"
+    fi
 }
 
 # Generate onboarding summary
 generate_summary() {
-    log "INFO" "=== ONBOARDING SUMMARY ==="
-    log "INFO" "User Principal Name: $USER_PRINCIPAL_NAME"
-    log "INFO" "Display Name: $DISPLAY_NAME"
-    log "INFO" "Subscription: $SUBSCRIPTION_ID"
-    
+    echo -e "${BLUE}┌──────────────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${BLUE}│                        ONBOARDING SUMMARY                       │${NC}"
+    echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${BLUE}│ User:         $USER_PRINCIPAL_NAME${NC}"
+    if [[ -n "$DISPLAY_NAME" ]]; then
+        echo -e "${BLUE}│ Display Name: $DISPLAY_NAME${NC}"
+    fi
+    echo -e "${BLUE}│ Subscription: $SUBSCRIPTION_ID${NC}"
     if [[ -n "$RESOURCE_GROUP" ]]; then
-        log "INFO" "Resource Group: $RESOURCE_GROUP"
+        echo -e "${BLUE}│ Resource Group: $RESOURCE_GROUP${NC}"
+    fi
+    echo -e "${BLUE}│ Date:         $(date)${NC}"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "${BLUE}│ Mode:         ${YELLOW}DRY RUN (no changes made)${BLUE}${NC}"
+    else
+        echo -e "${BLUE}│ Mode:         ${GREEN}EXECUTION (changes applied)${BLUE}${NC}"
     fi
     
+    echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${BLUE}│                           OPERATIONS                            │${NC}"
+    echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+    
+    [[ "$ENTRA_OPERATIONS" == "true" ]] && echo -e "${BLUE}│ ✓ User account creation     $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    [[ "$ENTRA_OPERATIONS" == "true" && ${#ENTRA_ID_GROUPS[@]} -gt 0 ]] && echo -e "${BLUE}│ ✓ Group assignments         $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    [[ ${#RBAC_ROLES[@]} -gt 0 ]] && echo -e "${BLUE}│ ✓ RBAC role assignments     $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    [[ "$MANAGE_VMS" == "true" ]] && echo -e "${BLUE}│ ✓ VM SSH key setup          $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    
     if [[ ${#ENTRA_ID_GROUPS[@]} -gt 0 ]]; then
-        log "INFO" "Microsoft Entra ID Groups: ${ENTRA_ID_GROUPS[*]}"
+        echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+        echo -e "${BLUE}│ Groups: ${ENTRA_ID_GROUPS[*]}${NC}"
     fi
     
     if [[ ${#RBAC_ROLES[@]} -gt 0 ]]; then
-        log "INFO" "RBAC Roles: ${RBAC_ROLES[*]}"
+        echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+        echo -e "${BLUE}│ Roles: ${RBAC_ROLES[*]}${NC}"
     fi
     
-    if [[ "$MANAGE_VMS" == "true" ]]; then
-        log "INFO" "VM Management: ENABLED"
-        log "INFO" "VM Resource Group: $VM_RESOURCE_GROUP"
-        log "INFO" "SSH Key Target: azroot account"
-        if [[ ${#VM_NAMES[@]} -gt 0 ]]; then
-            log "INFO" "Target VMs: ${VM_NAMES[*]}"
-        fi
-    fi
-    
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log "INFO" "Mode: DRY RUN (no changes made)"
-    else
-        log "INFO" "Mode: EXECUTION (changes applied)"
-    fi
-    
-    log "INFO" "Log file: $LOG_FILE"
-    log "INFO" "=========================="
+    echo -e "${BLUE}└──────────────────────────────────────────────────────────────────┘${NC}"
+    echo
 }
 
 # Validate SSH public key
@@ -531,9 +606,11 @@ validate_ssh_key() {
 # Manage SSH keys on Azure VMs (azroot account only)
 manage_vm_ssh_access() {
     if [[ "$MANAGE_VMS" != "true" ]]; then
-        log "INFO" "VM management disabled, skipping SSH access setup"
+        print_operation_status "VM SSH Access Management" "skip" "--manage-vms not specified"
         return 0
     fi
+    
+    print_operation_status "VM SSH Access Management" "start" "Preparing to add SSH keys to azroot accounts"
     
     log "INFO" "Managing SSH keys on Azure VMs for azroot account..."
     
@@ -596,11 +673,13 @@ manage_vm_ssh_access() {
         fi
     done
     
-    log "INFO" "VM SSH key management completed: $success_count/$total_vms VMs processed successfully"
+    local failed_vms=$((total_vms - success_count))
     
-    if [[ $success_count -lt $total_vms ]]; then
-        log "WARN" "Some VMs failed to configure. Check the logs above for details."
-        return 1
+    if [[ "$failed_vms" -eq 0 ]]; then
+        print_operation_status "VM SSH Access Management" "success" "SSH keys added to $success_count VMs"
+    else
+        print_operation_status "VM SSH Access Management" "error" "SSH key setup failed on $failed_vms out of $total_vms VMs"
+        log "WARN" "SSH key setup failed on $failed_vms VMs"
     fi
     
     return 0
@@ -707,24 +786,65 @@ EOF
 
 # Main execution function
 main() {
-    echo -e "${BLUE}=== Azure User Onboarding Script ===${NC}"
+    echo
+    echo -e "${BLUE}╭═══════════════════════════════════════════════════════════════════╮${NC}"
+    echo -e "${BLUE}│                     Azure User Onboarding Script                  │${NC}"
+    echo -e "${BLUE}╰═══════════════════════════════════════════════════════════════════╯${NC}"
     echo
     
+    # Phase 1: Prerequisites and Validation
+    print_section "🔍 PHASE 1: Prerequisites & Validation" "$BLUE"
+    
+    print_progress "1" "7" "Checking prerequisites"
     check_prerequisites
+    
+    print_progress "2" "7" "Verifying permissions"
     check_permissions
+    
+    print_progress "3" "7" "Validating input parameters"
     validate_input
     
-    echo -e "${YELLOW}Starting onboarding process for: $USER_PRINCIPAL_NAME${NC}"
+    # Phase 2: User Setup
+    print_section "👤 PHASE 2: User Account Setup" "$BLUE"
     
+    echo -e "${YELLOW}👤 Processing user: $USER_PRINCIPAL_NAME${NC}"
+    echo -e "${YELLOW}🔧 Subscription: $SUBSCRIPTION_ID${NC}"
+    if [[ -n "$DISPLAY_NAME" ]]; then
+        echo -e "${YELLOW}🏷️  Display name: $DISPLAY_NAME${NC}"
+    fi
+    echo
+    
+    print_progress "4" "7" "Creating/verifying user account"
     create_entra_id_user
+    echo
+    
+    # Phase 3: Group and Role Assignment
+    print_section "🔐 PHASE 3: Access & Permissions" "$YELLOW"
+    
+    print_progress "5" "7" "Adding to groups"
     add_to_entra_groups
+    echo
+    
+    print_progress "6" "7" "Assigning RBAC roles"
     assign_rbac_roles
+    echo
+    
+    print_progress "7" "7" "Configuring VM access"
     manage_vm_ssh_access
+    echo
+    
+    # Phase 4: Summary and Results
+    print_section "📋 PHASE 4: Summary & Results" "$GREEN"
     
     generate_summary
     
-    echo -e "${GREEN}✓ Onboarding process completed successfully!${NC}"
-    echo -e "Check the log file for detailed information: ${LOG_FILE}"
+    echo
+    echo -e "${GREEN}╭═══════════════════════════════════════════════════════════════════╮${NC}"
+    echo -e "${GREEN}│                     ✅ ONBOARDING COMPLETED                         │${NC}"
+    echo -e "${GREEN}╰═══════════════════════════════════════════════════════════════════╯${NC}"
+    echo
+    echo -e "${BLUE}📁 Log file: ${LOG_FILE}${NC}"
+    echo
 }
 
 #################################################################################
