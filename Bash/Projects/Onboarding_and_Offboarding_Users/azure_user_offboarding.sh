@@ -2,7 +2,7 @@
 
 #################################################################################
 # Azure User Offboarding Script
-# Description: Automates the offboarding process for users from Azure resources
+# Description: Automates the offboarding process for users from Azure resources using Microsoft Entra ID
 # Author: Your Organization
 # Version: 1.0
 # Last Modified: $(date)
@@ -56,7 +56,7 @@ Required Parameters:
 
 Optional Parameters:
     --no-disable-user       Skip disabling the user account (default: disable user)
-    --no-remove-groups      Skip removing user from Azure AD groups (default: remove)
+    --no-remove-groups      Skip removing user from Microsoft Entra ID groups (default: remove)
     --no-revoke-roles       Skip revoking RBAC role assignments (default: revoke)
     --no-backup            Skip creating backup of user's access (default: create backup)
     -f, --force            Force execution without confirmation prompts
@@ -142,17 +142,17 @@ validate_input() {
     log "INFO" "Input validation completed successfully"
 }
 
-# Check if user exists in Azure AD
+# Check if user exists in Microsoft Entra ID
 check_user_exists() {
-    log "INFO" "Checking if user exists in Azure AD..."
+    log "INFO" "Checking if user exists in Microsoft Entra ID..."
     
-    local existing_user=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
+    local existing_user=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
     
     if [[ -n "$existing_user" ]]; then
-        log "INFO" "User found in Azure AD: $existing_user"
+        log "INFO" "User found in Microsoft Entra ID: $existing_user"
         return 0
     else
-        log "WARN" "User does not exist in Azure AD: $USER_PRINCIPAL_NAME"
+        log "WARN" "User does not exist in Microsoft Entra ID: $USER_PRINCIPAL_NAME"
         return 1
     fi
 }
@@ -176,16 +176,16 @@ get_user_info() {
     log "INFO" "Creating user data backup..."
     
     # Get basic user information
-    local user_details=$(az ad user show --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo "{}")
+    local user_details=$(az entra user show --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo "{}")
     
     # Get user's group memberships
-    local group_memberships=$(az ad user get-member-groups --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo "[]")
+    local group_memberships=$(az entra user get-member-groups --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo "[]")
     
     # Get user's role assignments across all scopes
     local role_assignments=$(az role assignment list --assignee "$USER_PRINCIPAL_NAME" --all --output json 2>/dev/null || echo "[]")
     
     # Get user's owned applications (if any)
-    local owned_apps=$(az ad app list --filter "owners/any(o:o/id eq '$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)')" --output json 2>/dev/null || echo "[]")
+    local owned_apps=$(az entra app list --filter "owners/any(o:o/id eq '$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)')" --output json 2>/dev/null || echo "[]")
     
     # Create comprehensive backup
     cat > "$user_info_file" << EOF
@@ -210,22 +210,22 @@ EOF
     return 0
 }
 
-# Remove user from Azure AD groups
+# Remove user from Microsoft Entra ID groups
 remove_from_groups() {
     if [[ "$REMOVE_FROM_GROUPS" != "true" ]]; then
         log "INFO" "Skipping group removal per configuration"
         return 0
     fi
     
-    log "INFO" "Removing user from Azure AD groups..."
+    log "INFO" "Removing user from Microsoft Entra ID groups..."
     
     if ! check_user_exists; then
         log "WARN" "Cannot remove from groups - user does not exist"
         return 1
     fi
     
-    local user_id=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
-    local groups=$(az ad user get-member-groups --id "$USER_PRINCIPAL_NAME" --query "[]" -o tsv 2>/dev/null || echo "")
+    local user_id=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
+    local groups=$(az entra user get-member-groups --id "$USER_PRINCIPAL_NAME" --query "[]" -o tsv 2>/dev/null || echo "")
     
     if [[ -z "$groups" ]]; then
         log "INFO" "User is not a member of any groups"
@@ -235,12 +235,12 @@ remove_from_groups() {
     local group_count=0
     while IFS= read -r group_id; do
         if [[ -n "$group_id" ]]; then
-            local group_name=$(az ad group show --group "$group_id" --query displayName -o tsv 2>/dev/null || echo "Unknown")
+            local group_name=$(az entra group show --group "$group_id" --query displayName -o tsv 2>/dev/null || echo "Unknown")
             
             if [[ "$DRY_RUN" == "true" ]]; then
                 log "INFO" "[DRY RUN] Would remove user from group: $group_name ($group_id)"
             else
-                if az ad group member remove --group "$group_id" --member-id "$user_id" &>/dev/null; then
+                if az entra group member remove --group "$group_id" --member-id "$user_id" &>/dev/null; then
                     log "INFO" "Removed user from group: $group_name"
                     ((group_count++))
                 else
@@ -314,7 +314,7 @@ disable_user_account() {
     fi
     
     # Check if user is already disabled
-    local account_enabled=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query accountEnabled -o tsv 2>/dev/null)
+    local account_enabled=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query accountEnabled -o tsv 2>/dev/null)
     
     if [[ "$account_enabled" == "false" ]]; then
         log "INFO" "User account is already disabled"
@@ -324,7 +324,7 @@ disable_user_account() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log "INFO" "[DRY RUN] Would disable user account: $USER_PRINCIPAL_NAME"
     else
-        if az ad user update --id "$USER_PRINCIPAL_NAME" --account-enabled false &>/dev/null; then
+        if az entra user update --id "$USER_PRINCIPAL_NAME" --account-enabled false &>/dev/null; then
             log "INFO" "Successfully disabled user account: $USER_PRINCIPAL_NAME"
         else
             log "ERROR" "Failed to disable user account: $USER_PRINCIPAL_NAME"
@@ -341,10 +341,10 @@ check_owned_resources() {
         return 1
     fi
     
-    local user_id=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
+    local user_id=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
     
     # Check for owned applications
-    local owned_apps=$(az ad app list --filter "owners/any(o:o/id eq '$user_id')" --query "[].{displayName:displayName,appId:appId}" -o json 2>/dev/null || echo "[]")
+    local owned_apps=$(az entra app list --filter "owners/any(o:o/id eq '$user_id')" --query "[].{displayName:displayName,appId:appId}" -o json 2>/dev/null || echo "[]")
     local app_count=$(echo "$owned_apps" | jq '. | length')
     
     if [[ "$app_count" -gt 0 ]]; then
@@ -355,7 +355,7 @@ check_owned_resources() {
     fi
     
     # Check for owned service principals
-    local owned_sps=$(az ad sp list --filter "owners/any(o:o/id eq '$user_id')" --query "[].{displayName:displayName,appId:appId}" -o json 2>/dev/null || echo "[]")
+    local owned_sps=$(az entra sp list --filter "owners/any(o:o/id eq '$user_id')" --query "[].{displayName:displayName,appId:appId}" -o json 2>/dev/null || echo "[]")
     local sp_count=$(echo "$owned_sps" | jq '. | length')
     
     if [[ "$sp_count" -gt 0 ]]; then
@@ -444,7 +444,7 @@ main() {
     validate_input
     
     if ! check_user_exists; then
-        echo -e "${RED}Error: User $USER_PRINCIPAL_NAME does not exist in Azure AD${NC}"
+        echo -e "${RED}Error: User $USER_PRINCIPAL_NAME does not exist in Microsoft Entra ID${NC}"
         exit 1
     fi
     
