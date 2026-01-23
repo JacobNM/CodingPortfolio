@@ -54,6 +54,59 @@ log() {
     echo -e "${timestamp} [${level}] ${message}" | tee -a "$LOG_FILE"
 }
 
+# Print section header with visual separator
+print_section() {
+    local title="$1"
+    local color="${2:-$BLUE}"
+    echo
+    echo -e "${color}╭─────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${color}│ $title${NC}"
+    echo -e "${color}╰─────────────────────────────────────────────────────────╯${NC}"
+    echo
+}
+
+# Print operation status with progress indicator
+print_operation_status() {
+    local operation="$1"
+    local status="$2" # "start", "success", "skip", "error"
+    local message="${3:-}"
+    
+    case "$status" in
+        "start")
+            echo -e "${BLUE}🔄 Starting: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+        "success")
+            echo -e "${GREEN}✅ Completed: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+        "skip")
+            echo -e "${YELLOW}⏭️  Skipped: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+        "error")
+            echo -e "${RED}❌ Failed: $operation${NC}"
+            if [[ -n "$message" ]]; then
+                echo -e "   $message"
+            fi
+            ;;
+    esac
+}
+
+# Print progress indicator
+print_progress() {
+    local current="$1"
+    local total="$2"
+    local operation="$3"
+    echo -e "${BLUE}[Step $current/$total] $operation${NC}"
+}
+
 # Print usage information
 usage() {
     cat << EOF
