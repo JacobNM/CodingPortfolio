@@ -135,7 +135,6 @@ If you have both Entra ID and Azure permissions:
 - Comprehensive logging and audit trail
 - Dry-run mode for testing
 - Input validation and error handling
-- Optional welcome email functionality (placeholder)
 
 ### Usage
 
@@ -155,8 +154,7 @@ If you have both Entra ID and Azure permissions:
   -s "12345678-1234-1234-1234-123456789012" \
   -g "IT-Team,Project-Alpha" \
   -R "Contributor,Storage Blob Data Reader" \
-  -r "production-rg" \
-  -e
+  -r "production-rg"
 ```
 
 #### Onboarding with VM SSH Access
@@ -182,7 +180,6 @@ If you have both Entra ID and Azure permissions:
 | `-g, --entra-groups` | Comma-separated list of Microsoft Entra ID groups | No |
 | `-R, --rbac-roles` | Comma-separated list of RBAC roles to assign | No |
 | `-n, --dry-run` | Preview changes without executing them | No |
-| `-e, --send-email` | Send welcome email with access details | No |
 | `--manage-vms` | Enable VM SSH key management | No |
 | `--vm-resource-group` | Resource group containing the VMs | No* |
 | `--vm-names` | Comma-separated list of VM names (auto-discover if empty) | No |
@@ -422,14 +419,6 @@ The onboarding script assigns the `Reader` role by default if no roles are speci
 # Set default roles - adjust based on your organization's needs
 RBAC_ROLES=("Reader")
 ```
-
-### Email Integration
-The onboarding script includes a placeholder for welcome email functionality. Integrate with your organization's email system:
-
-- Microsoft Graph API
-- SendGrid
-- Organization's SMTP server
-- PowerShell Send-MailMessage
 
 ### Group Templates
 You can modify the scripts to include organization-specific default groups or role templates.
