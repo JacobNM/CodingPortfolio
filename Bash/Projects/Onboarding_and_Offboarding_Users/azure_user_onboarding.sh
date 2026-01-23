@@ -372,7 +372,7 @@ validate_input() {
 check_user_exists() {
     log "INFO" "Checking if user already exists in Microsoft Entra ID..."
     
-    local existing_user=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
+    local existing_user=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
     
     if [[ -n "$existing_user" ]]; then
         log "INFO" "User already exists in Microsoft Entra ID: $existing_user"
