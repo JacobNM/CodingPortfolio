@@ -32,6 +32,8 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 - Creates new Microsoft Entra ID users (if they don't exist)
 - Adds users to specified Microsoft Entra ID groups
 - Assigns RBAC roles at subscription or resource group level
+- **Manages SSH keys on Azure Linux VMs (azroot account)**
+- **Adds SSH public keys to existing azroot authorized_keys**
 - Comprehensive logging and audit trail
 - Dry-run mode for testing
 - Input validation and error handling
@@ -59,13 +61,16 @@ This repository contains two comprehensive Bash scripts for automating Azure use
   -e
 ```
 
-#### Dry Run (Preview Changes)
+#### Onboarding with VM SSH Access
 ```bash
 ./azure_user_onboarding.sh \
-  -u test.user@company.com \
-  -d "Test User" \
+  -u dev.user@company.com \
+  -d "Dev User" \
   -s "12345678-1234-1234-1234-123456789012" \
-  -n
+  --manage-vms \
+  --vm-resource-group "vm-rg" \
+  --vm-names "web01,web02,db01" \
+  --ssh-public-key "~/.ssh/id_rsa.pub"
 ```
 
 ### Parameters
@@ -80,7 +85,13 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 | `-R, --rbac-roles` | Comma-separated list of RBAC roles to assign | No |
 | `-n, --dry-run` | Preview changes without executing them | No |
 | `-e, --send-email` | Send welcome email with access details | No |
+| `--manage-vms` | Enable VM SSH key management | No |
+| `--vm-resource-group` | Resource group containing the VMs | No* |
+| `--vm-names` | Comma-separated list of VM names (auto-discover if empty) | No |
+| `--ssh-public-key` | SSH public key to add to azroot account (file path or key string) | No* |
 | `-h, --help` | Display help message | No |
+
+*Required when `--manage-vms` is enabled
 
 ## Offboarding Script (`azure_user_offboarding.sh`)
 
@@ -88,6 +99,8 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 - Disables Microsoft Entra ID user accounts
 - Removes users from all Microsoft Entra ID groups
 - Revokes all RBAC role assignments
+- **Clears SSH keys from Azure Linux VMs (azroot account)**
+- **Backs up authorized_keys before clearing**
 - Creates comprehensive backup of user's access data
 - Identifies owned resources that need reassignment
 - Comprehensive logging and audit trail
@@ -111,12 +124,14 @@ This repository contains two comprehensive Bash scripts for automating Azure use
   --no-disable-user
 ```
 
-#### Automated Offboarding (No Prompts)
+#### Offboarding with VM SSH Removal
 ```bash
 ./azure_user_offboarding.sh \
-  -u automated.user@company.com \
+  -u dev.user@company.com \
   -s "12345678-1234-1234-1234-123456789012" \
-  -f
+  --manage-vms \
+  --vm-resource-group "vm-rg" \
+  --vm-names "web01,web02,db01"
 ```
 
 #### Dry Run (Preview Changes)
@@ -137,9 +152,139 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 | `--no-remove-groups` | Skip removing user from Microsoft Entra ID groups | No |
 | `--no-revoke-roles` | Skip revoking RBAC role assignments | No |
 | `--no-backup` | Skip creating backup of user's access | No |
+| `--manage-vms` | Enable VM SSH key management | No |
+| `--vm-resource-group` | Resource group containing the VMs | No* |
+| `--vm-names` | Comma-separated list of VM names (auto-discover if empty) | No |
 | `-f, --force` | Force execution without confirmation prompts | No |
 | `-n, --dry-run` | Preview changes without executing them | No |
 | `-h, --help` | Display help message | No |
+
+*Required when `--manage-vms` is enabled
+
+## VM SSH Key Management
+
+Both scripts now support managing SSH keys on Azure Linux VMs for the **azroot account** as part of the user lifecycle process. This simplified approach focuses on key management rather than user account creation.
+
+### How It Works
+
+The VM management functionality uses **Azure VM Extensions** (specifically the CustomScript extension) to execute commands on your Linux VMs without requiring direct SSH access to the machines. This approach:
+
+- ✅ Works with VMs that don't have public IPs
+- ✅ Doesn't require opening SSH ports to the internet  
+- ✅ Uses Azure's secure communication channels
+- ✅ Maintains audit logs through Azure Activity Log
+- ✅ Focuses on existing `azroot` account only
+
+### Onboarding VM Features
+
+**SSH Key Management:**
+- Adds SSH public keys to the `azroot` account's `authorized_keys` file
+- Creates SSH directory structure if it doesn't exist (`/home/azroot/.ssh/`)
+- Sets proper permissions (700 for `.ssh`, 600 for `authorized_keys`)
+- Prevents duplicate key entries
+- Supports all common SSH key types (RSA, DSA, Ed25519, ECDSA)
+
+**Auto-Discovery:**
+- If no VM names are specified, discovers all Linux VMs in the resource group
+- Skips Windows VMs automatically
+- Handles VM power states gracefully
+
+### Offboarding VM Features
+
+**SSH Key Removal:**
+- Backs up existing `authorized_keys` files before modification (timestamped backup)
+- **Clears ALL SSH keys** from the `azroot` account's `authorized_keys` file
+- Maintains proper file ownership and permissions
+- Does NOT remove the `azroot` user account
+
+### VM Management Examples
+
+#### Onboard user with SSH access to specific VMs
+```bash
+./azure_user_onboarding.sh \
+  -u alice@company.com \
+  -d "Alice Smith" \
+  -s "your-subscription-id" \
+  --manage-vms \
+  --vm-resource-group "production-vms" \
+  --vm-names "web01,web02,api01" \
+  --ssh-public-key "ssh-rsa AAAAB3NzaC1yc2E..."
+```
+
+#### Onboard user with auto-discovery of VMs
+```bash
+./azure_user_onboarding.sh \
+  -u bob@company.com \
+  -d "Bob Johnson" \
+  -s "your-subscription-id" \
+  --manage-vms \
+  --vm-resource-group "development-vms" \
+  --ssh-public-key "~/.ssh/id_ed25519.pub"
+```
+
+#### Offboard user and clear SSH keys from azroot
+```bash
+./azure_user_offboarding.sh \
+  -u alice@company.com \
+  -s "your-subscription-id" \
+  --manage-vms \
+  --vm-resource-group "production-vms"
+```
+
+#### Offboard with specific VMs and auto-discovery disabled
+```bash
+./azure_user_offboarding.sh \
+  -u bob@company.com \
+  -s "your-subscription-id" \
+  --manage-vms \
+  --vm-resource-group "development-vms" \
+  --vm-names "dev01,dev02,test01"
+```
+
+### VM Management Prerequisites
+
+1. **VM Requirements:**
+   - Linux VMs only (Windows VMs are skipped)
+   - Azure VM Agent must be installed and running
+   - VMs must be in a running state (or the script will attempt anyway)
+   - `azroot` account must exist on the VMs
+
+2. **Azure Permissions:**
+   - `Virtual Machine Contributor` role on the resource group containing VMs
+   - `Virtual Machine Extension Contributor` for installing VM extensions
+
+3. **Network Requirements:**
+   - No special network configuration required
+   - Works with VMs behind NAT gateways or without public IPs
+   - Uses Azure's internal communication channels
+
+### VM Management Best Practices
+
+**Security:**
+- Always use dry-run mode first to preview changes
+- Use strong SSH keys (Ed25519 recommended)
+- Regularly rotate SSH keys
+- Monitor VM extension execution logs
+- Remember that offboarding **clears ALL keys** from azroot account
+
+**Operational:**
+- Group VMs by environment/purpose in separate resource groups
+- Use consistent naming conventions for VMs
+- Document which users have keys added to which VMs
+- Test VM management in development environments first
+- Consider the impact of clearing all keys during offboarding
+
+**Key Management:**
+- Keep track of which keys are added to which VMs
+- Offboarding removes **ALL** keys from azroot, not just the specific user's key
+- Consider using separate service accounts if you need more granular control
+- Backup `authorized_keys` files before offboarding (script does this automatically)
+
+**Troubleshooting:**
+- Check Azure Activity Log for VM extension execution details
+- Verify VM Agent is running: `az vm get-instance-view`
+- Ensure VMs are in running state for best results
+- Check VM extension logs on the VM: `/var/log/azure/`
 
 ## Security Best Practices
 
