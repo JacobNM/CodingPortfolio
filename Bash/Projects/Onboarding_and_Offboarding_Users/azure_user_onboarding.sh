@@ -28,6 +28,10 @@ ENTRA_ID_GROUPS=()
 RBAC_ROLES=()
 DRY_RUN=false
 SEND_WELCOME_EMAIL=false
+MANAGE_VMS=false
+VM_RESOURCE_GROUP=""
+VM_NAMES=()
+SSH_PUBLIC_KEY=""
 
 #################################################################################
 # Functions
@@ -58,6 +62,10 @@ Optional Parameters:
     -R, --rbac-roles         Comma-separated list of RBAC roles to assign
     -n, --dry-run           Preview changes without executing them
     -e, --send-email        Send welcome email with access details
+    --manage-vms            Enable VM SSH key management
+    --vm-resource-group     Resource group containing the VMs (required if --manage-vms)
+    --vm-names              Comma-separated list of VM names to manage
+    --ssh-public-key        SSH public key to add to azroot account (file path or key string)
     -h, --help              Display this help message
 
 Examples:
@@ -68,6 +76,11 @@ Examples:
     $0 -u jane.smith@company.com -d "Jane Smith" -s "12345678-1234-1234-1234-123456789012" \\
        -g "IT-Team,Project-Alpha" -R "Contributor,Storage Blob Data Reader" \\
        -r "production-rg" -e
+
+    # Onboarding with VM SSH access
+    $0 -u dev.user@company.com -d "Dev User" -s "12345678-1234-1234-1234-123456789012" \\
+       --manage-vms --vm-resource-group "vm-rg" --vm-names "web01,web02,db01" \\
+       --ssh-public-key "~/.ssh/id_rsa.pub"
 
     # Dry run to preview changes
     $0 -u test.user@company.com -d "Test User" -s "12345678-1234-1234-1234-123456789012" -n
@@ -290,6 +303,15 @@ generate_summary() {
         log "INFO" "RBAC Roles: ${RBAC_ROLES[*]}"
     fi
     
+    if [[ "$MANAGE_VMS" == "true" ]]; then
+        log "INFO" "VM Management: ENABLED"
+        log "INFO" "VM Resource Group: $VM_RESOURCE_GROUP"
+        log "INFO" "SSH Key Target: azroot account"
+        if [[ ${#VM_NAMES[@]} -gt 0 ]]; then
+            log "INFO" "Target VMs: ${VM_NAMES[*]}"
+        fi
+    fi
+    
     if [[ "$DRY_RUN" == "true" ]]; then
         log "INFO" "Mode: DRY RUN (no changes made)"
     else
@@ -323,6 +345,214 @@ send_welcome_email() {
     fi
 }
 
+# Validate SSH public key
+validate_ssh_key() {
+    if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+        log "ERROR" "SSH public key is required for VM management"
+        return 1
+    fi
+    
+    local ssh_key_content=""
+    
+    # Check if it's a file path
+    if [[ -f "$SSH_PUBLIC_KEY" ]]; then
+        ssh_key_content=$(cat "$SSH_PUBLIC_KEY")
+        log "INFO" "Loading SSH public key from file: $SSH_PUBLIC_KEY"
+    else
+        # Assume it's the key content directly
+        ssh_key_content="$SSH_PUBLIC_KEY"
+        log "INFO" "Using SSH public key provided as string"
+    fi
+    
+    # Validate SSH key format
+    if [[ ! "$ssh_key_content" =~ ^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) ]]; then
+        log "ERROR" "Invalid SSH public key format"
+        return 1
+    fi
+    
+    # Store the validated key content
+    SSH_PUBLIC_KEY="$ssh_key_content"
+    log "INFO" "SSH public key validated successfully"
+    return 0
+}
+
+# Manage SSH keys on Azure VMs (azroot account only)
+manage_vm_ssh_access() {
+    if [[ "$MANAGE_VMS" != "true" ]]; then
+        log "INFO" "VM management disabled, skipping SSH access setup"
+        return 0
+    fi
+    
+    log "INFO" "Managing SSH keys on Azure VMs for azroot account..."
+    
+    # Validate prerequisites
+    if [[ -z "$VM_RESOURCE_GROUP" ]]; then
+        log "ERROR" "VM resource group is required for VM management"
+        return 1
+    fi
+    
+    if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
+        log "INFO" "No VM names specified, discovering VMs in resource group: $VM_RESOURCE_GROUP"
+        
+        # Get all Linux VMs in the resource group
+        local discovered_vms=$(az vm list -g "$VM_RESOURCE_GROUP" --query "[?storageProfile.osDisk.osType=='Linux'].name" -o tsv)
+        
+        if [[ -z "$discovered_vms" ]]; then
+            log "WARN" "No Linux VMs found in resource group: $VM_RESOURCE_GROUP"
+            return 0
+        fi
+        
+        # Convert to array
+        IFS=$'\n' read -ra VM_NAMES <<< "$discovered_vms"
+        log "INFO" "Discovered ${#VM_NAMES[@]} Linux VMs: ${VM_NAMES[*]}"
+    fi
+    
+    # Validate SSH key
+    if ! validate_ssh_key; then
+        return 1
+    fi
+    
+    # Process each VM
+    local success_count=0
+    local total_vms=${#VM_NAMES[@]}
+    
+    for vm_name in "${VM_NAMES[@]}"; do
+        log "INFO" "Processing VM: $vm_name"
+        
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log "INFO" "[DRY RUN] Would add SSH key to azroot account on VM: $vm_name"
+            ((success_count++))
+            continue
+        fi
+        
+        # Check if VM exists and is running
+        local vm_state=$(az vm get-instance-view -g "$VM_RESOURCE_GROUP" -n "$vm_name" --query "instanceView.statuses[1].displayStatus" -o tsv 2>/dev/null)
+        
+        if [[ -z "$vm_state" ]]; then
+            log "ERROR" "VM not found: $vm_name"
+            continue
+        fi
+        
+        if [[ "$vm_state" != "VM running" ]]; then
+            log "WARN" "VM is not running: $vm_name (state: $vm_state)"
+            log "INFO" "Attempting to add SSH key anyway..."
+        fi
+        
+        # Add SSH key using Azure VM extension
+        if add_ssh_key_to_vm "$vm_name"; then
+            ((success_count++))
+        fi
+    done
+    
+    log "INFO" "VM SSH key management completed: $success_count/$total_vms VMs processed successfully"
+    
+    if [[ $success_count -lt $total_vms ]]; then
+        log "WARN" "Some VMs failed to configure. Check the logs above for details."
+        return 1
+    fi
+    
+    return 0
+}
+
+# Add SSH key to azroot account on a specific VM
+add_ssh_key_to_vm() {
+    local vm_name="$1"
+    
+    log "INFO" "Adding SSH key to azroot account on VM: $vm_name"
+    
+    # Create a temporary script for VM execution
+    local temp_script=$(mktemp)
+    cat > "$temp_script" << EOF
+#!/bin/bash
+set -euo pipefail
+
+SSH_KEY="$SSH_PUBLIC_KEY"
+AZROOT_HOME="/home/azroot"
+SSH_DIR="\$AZROOT_HOME/.ssh"
+AUTHORIZED_KEYS="\$SSH_DIR/authorized_keys"
+
+# Function to log with timestamp
+log_vm() {
+    echo "\$(date '+%Y-%m-%d %H:%M:%S') [\$1] \$2"
+}
+
+log_vm "INFO" "Adding SSH key to azroot account"
+
+# Ensure SSH directory exists
+if [[ ! -d "\$SSH_DIR" ]]; then
+    log_vm "INFO" "Creating SSH directory: \$SSH_DIR"
+    mkdir -p "\$SSH_DIR"
+    chown azroot:azroot "\$SSH_DIR"
+    chmod 700 "\$SSH_DIR"
+fi
+
+# Create authorized_keys file if it doesn't exist
+if [[ ! -f "\$AUTHORIZED_KEYS" ]]; then
+    log_vm "INFO" "Creating authorized_keys file"
+    touch "\$AUTHORIZED_KEYS"
+    chown azroot:azroot "\$AUTHORIZED_KEYS"
+    chmod 600 "\$AUTHORIZED_KEYS"
+fi
+
+# Check if key already exists
+if grep -Fxq "\$SSH_KEY" "\$AUTHORIZED_KEYS"; then
+    log_vm "INFO" "SSH key already exists in authorized_keys"
+else
+    echo "\$SSH_KEY" >> "\$AUTHORIZED_KEYS"
+    log_vm "INFO" "SSH key added to authorized_keys"
+fi
+
+# Ensure proper permissions
+chown azroot:azroot "\$AUTHORIZED_KEYS"
+chmod 600 "\$AUTHORIZED_KEYS"
+
+log_vm "INFO" "SSH key management completed for azroot account"
+EOF
+
+    # Execute the script on the VM using Azure VM extension
+    local extension_name="ssh-add-$(date +%s)"
+    
+    log "INFO" "Executing SSH key addition script on VM: $vm_name"
+    
+    if az vm extension set \
+        --resource-group "$VM_RESOURCE_GROUP" \
+        --vm-name "$vm_name" \
+        --name CustomScript \
+        --publisher Microsoft.Azure.Extensions \
+        --settings "{\"fileUris\": [], \"commandToExecute\": \"bash -s\"}" \
+        --protected-settings "{\"script\": \"$(base64 -i "$temp_script")\"}" \
+        --no-wait &>/dev/null; then
+        
+        log "INFO" "SSH key addition script deployed to VM: $vm_name"
+        
+        # Wait a moment for execution
+        sleep 5
+        
+        # Check extension status
+        local extension_status=$(az vm extension show \
+            --resource-group "$VM_RESOURCE_GROUP" \
+            --vm-name "$vm_name" \
+            --name CustomScript \
+            --query "provisioningState" -o tsv 2>/dev/null || echo "Unknown")
+        
+        if [[ "$extension_status" == "Succeeded" ]]; then
+            log "INFO" "Successfully added SSH key to VM: $vm_name"
+            rm -f "$temp_script"
+            return 0
+        else
+            log "WARN" "Extension status unclear for VM: $vm_name (status: $extension_status)"
+            log "INFO" "SSH key addition may still be in progress"
+        fi
+    else
+        log "ERROR" "Failed to deploy SSH key addition script to VM: $vm_name"
+        rm -f "$temp_script"
+        return 1
+    fi
+    
+    rm -f "$temp_script"
+    return 0
+}
+
 # Main execution function
 main() {
     echo -e "${BLUE}=== Azure User Onboarding Script ===${NC}"
@@ -337,6 +567,7 @@ main() {
     create_entra_id_user
     add_to_entra_groups
     assign_rbac_roles
+    manage_vm_ssh_access
     send_welcome_email
     
     generate_summary
@@ -383,6 +614,22 @@ while [[ $# -gt 0 ]]; do
         -e|--send-email)
             SEND_WELCOME_EMAIL=true
             shift
+            ;;
+        --manage-vms)
+            MANAGE_VMS=true
+            shift
+            ;;
+        --vm-resource-group)
+            VM_RESOURCE_GROUP="$2"
+            shift 2
+            ;;
+        --vm-names)
+            IFS=',' read -ra VM_NAMES <<< "$2"
+            shift 2
+            ;;
+        --ssh-public-key)
+            SSH_PUBLIC_KEY="$2"
+            shift 2
             ;;
         -h|--help)
             usage
