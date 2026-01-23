@@ -2,7 +2,9 @@
 
 #################################################################################
 # Azure User Onboarding Script
-# Description: Automates the onboarding process for new users to Azure resources using Microsoft Entra ID
+# Description: Automates the onboarding process for users to Azure resources
+#              Supports optional Microsoft Entra ID operations (requires additional permissions)
+#              Core functionality works with Azure subscription Owner role
 #################################################################################
 
 set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
@@ -10,7 +12,10 @@ set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/onboarding_$(date +%Y%m%d_%H%M%S).log"
-REQUIRED_ROLES=("User Access Administrator" "Privileged Role Administrator")
+# Azure subscription roles (Owner role provides all these)
+REQUIRED_AZURE_ROLES=("User Access Administrator" "Virtual Machine Contributor")
+# Entra ID roles (only needed if --entra-operations is enabled)
+REQUIRED_ENTRA_ROLES=("User Administrator" "Groups Administrator")
 
 # Color codes for output
 RED='\033[0;31m'
@@ -28,6 +33,7 @@ ENTRA_ID_GROUPS=()
 RBAC_ROLES=()
 DRY_RUN=false
 SEND_WELCOME_EMAIL=false
+ENTRA_OPERATIONS=false
 MANAGE_VMS=false
 VM_RESOURCE_GROUP=""
 VM_NAMES=()
@@ -49,17 +55,27 @@ log() {
 # Print usage information
 usage() {
     cat << EOF
-Usage: $0 -u <user_principal_name> -d <display_name> -s <subscription_id> [OPTIONS]
+Usage: $0 -u <user_principal_name> -s <subscription_id> [OPTIONS]
+
+**CORE FUNCTIONALITY (requires Azure Owner role):**
+- RBAC role assignments
+- VM SSH key management
+- Resource access management
+
+**ENTRA ID FUNCTIONALITY (requires additional Entra ID permissions):**
+- User creation/management
+- Group membership management
 
 Required Parameters:
     -u, --user-principal     User Principal Name (UPN) - email address of the user
-    -d, --display-name       Display name for the user
     -s, --subscription       Azure subscription ID
 
 Optional Parameters:
+    -d, --display-name       Display name for the user (only used with --entra-operations)
     -r, --resource-group     Specific resource group to grant access to
-    -g, --entra-groups       Comma-separated list of Microsoft Entra ID groups to add user to
     -R, --rbac-roles         Comma-separated list of RBAC roles to assign
+    --entra-operations       Enable Microsoft Entra ID operations (user creation, groups)
+    -g, --entra-groups       Comma-separated list of Microsoft Entra ID groups (requires --entra-operations)
     -n, --dry-run           Preview changes without executing them
     -e, --send-email        Send welcome email with access details
     --manage-vms            Enable VM SSH key management
@@ -69,21 +85,21 @@ Optional Parameters:
     -h, --help              Display this help message
 
 Examples:
-    # Basic onboarding with default permissions
-    $0 -u john.doe@company.com -d "John Doe" -s "12345678-1234-1234-1234-123456789012"
+    # Basic onboarding - assign RBAC roles only (requires Azure Owner role)
+    $0 -u john.doe@company.com -s "12345678-1234-1234-1234-123456789012" -R "Contributor"
     
-    # Full onboarding with custom groups and roles
+    # Full onboarding with Entra ID operations (requires Entra ID permissions)
     $0 -u jane.smith@company.com -d "Jane Smith" -s "12345678-1234-1234-1234-123456789012" \\
-       -g "IT-Team,Project-Alpha" -R "Contributor,Storage Blob Data Reader" \\
-       -r "production-rg" -e
+       --entra-operations -g "IT-Team,Project-Alpha" -R "Contributor,Storage Blob Data Reader" \\
+       -r "production-rg"
 
-    # Onboarding with VM SSH access
-    $0 -u dev.user@company.com -d "Dev User" -s "12345678-1234-1234-1234-123456789012" \\
+    # Onboarding existing user with VM SSH access (no Entra ID needed)
+    $0 -u existing.user@company.com -s "12345678-1234-1234-1234-123456789012" \\
        --manage-vms --vm-resource-group "vm-rg" --vm-names "web01,web02,db01" \\
-       --ssh-public-key "~/.ssh/id_rsa.pub"
+       --ssh-public-key "~/.ssh/id_rsa.pub" -R "Virtual Machine Contributor"
 
     # Dry run to preview changes
-    $0 -u test.user@company.com -d "Test User" -s "12345678-1234-1234-1234-123456789012" -n
+    $0 -u test.user@company.com -s "12345678-1234-1234-1234-123456789012" -R "Reader" -n
 
 EOF
 }
@@ -120,16 +136,33 @@ check_permissions() {
     local current_user=$(az account show --query user.name -o tsv)
     log "INFO" "Current user: $current_user"
     
-    # Check if user has required roles at subscription level
-    for role in "${REQUIRED_ROLES[@]}"; do
-        local has_role=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \
-                        --query "[?roleDefinitionName=='$role']" -o tsv)
-        if [[ -z "$has_role" ]]; then
-            log "WARN" "Missing required role: $role. Some operations may fail."
-        else
-            log "INFO" "Confirmed role: $role"
-        fi
-    done
+    # Check Azure subscription roles (always required)
+    log "INFO" "Checking Azure subscription permissions..."
+    local has_owner=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \\
+                     --query "[?roleDefinitionName=='Owner']" -o tsv)
+    if [[ -n "$has_owner" ]]; then
+        log "INFO" "✓ Owner role confirmed - all Azure operations permitted"
+    else
+        log "INFO" "Checking individual Azure roles..."
+        for role in "${REQUIRED_AZURE_ROLES[@]}"; do
+            local has_role=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \\
+                            --query "[?roleDefinitionName=='$role']" -o tsv)
+            if [[ -z "$has_role" ]]; then
+                log "WARN" "Missing Azure role: $role. Some operations may fail."
+            else
+                log "INFO" "✓ Confirmed Azure role: $role"
+            fi
+        done
+    fi
+    
+    # Check Entra ID permissions only if required
+    if [[ "$ENTRA_OPERATIONS" == "true" ]]; then
+        log "INFO" "Checking Microsoft Entra ID permissions..."
+        log "WARN" "Entra ID operations enabled - ensure you have User Administrator or Groups Administrator role"
+        log "INFO" "If Entra ID operations fail, consider running without --entra-operations"
+    else
+        log "INFO" "Entra ID operations disabled - working with existing users only"
+    fi
 }
 
 # Validate user input
@@ -146,6 +179,23 @@ validate_input() {
     if [[ ! "$SUBSCRIPTION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
         log "ERROR" "Invalid subscription ID format: $SUBSCRIPTION_ID"
         exit 1
+    fi
+    
+    # Validate Entra ID specific requirements
+    if [[ "$ENTRA_OPERATIONS" == "true" ]]; then
+        if [[ -z "$DISPLAY_NAME" ]]; then
+            log "ERROR" "Display name is required when --entra-operations is enabled"
+            exit 1
+        fi
+        if [[ ${#ENTRA_ID_GROUPS[@]} -gt 0 ]]; then
+            log "INFO" "Entra ID groups specified: ${ENTRA_ID_GROUPS[*]}"
+        fi
+    else
+        if [[ ${#ENTRA_ID_GROUPS[@]} -gt 0 ]]; then
+            log "ERROR" "Entra ID groups specified but --entra-operations not enabled"
+            exit 1
+        fi
+        log "INFO" "Working with existing user (no Entra ID operations)"
     fi
     
     log "INFO" "Input validation completed successfully"
@@ -168,6 +218,12 @@ check_user_exists() {
 
 # Create user in Microsoft Entra ID (if needed)
 create_entra_id_user() {
+    if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
+        log "INFO" "Skipping Entra ID user operations (--entra-operations not specified)"
+        log "INFO" "Assuming user '$USER_PRINCIPAL_NAME' already exists in Entra ID"
+        return 0
+    fi
+    
     if check_user_exists; then
         log "INFO" "Skipping user creation - user already exists"
         return 0
@@ -202,6 +258,11 @@ create_entra_id_user() {
 
 # Add user to Microsoft Entra ID groups
 add_to_entra_groups() {
+    if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
+        log "INFO" "Skipping Entra ID group operations (--entra-operations not specified)"
+        return 0
+    fi
+    
     if [[ ${#ENTRA_ID_GROUPS[@]} -eq 0 ]]; then
         log "INFO" "No Microsoft Entra ID groups specified, skipping group assignments"
         return 0
@@ -631,6 +692,10 @@ while [[ $# -gt 0 ]]; do
             SSH_PUBLIC_KEY="$2"
             shift 2
             ;;
+        --entra-operations)
+            ENTRA_OPERATIONS=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -644,7 +709,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required parameters
-if [[ -z "$USER_PRINCIPAL_NAME" || -z "$DISPLAY_NAME" || -z "$SUBSCRIPTION_ID" ]]; then
+if [[ -z "$USER_PRINCIPAL_NAME" || -z "$SUBSCRIPTION_ID" ]]; then
     echo -e "${RED}Error: Missing required parameters${NC}"
     echo
     usage
