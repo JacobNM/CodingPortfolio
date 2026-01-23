@@ -283,15 +283,16 @@ EOF
 # Remove user from Microsoft Entra ID groups
 remove_from_groups() {
     if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
-        log "INFO" "Skipping Entra ID group operations (--entra-operations not specified)"
+        print_operation_status "Microsoft Entra ID Group Removal" "skip" "--entra-operations not specified"
         return 0
     fi
     
     if [[ "$REMOVE_FROM_GROUPS" != "true" ]]; then
-        log "INFO" "Skipping group removal per configuration"
+        print_operation_status "Microsoft Entra ID Group Removal" "skip" "Disabled in configuration"
         return 0
     fi
     
+    print_operation_status "Microsoft Entra ID Group Removal" "start" "Scanning user's group memberships"
     log "INFO" "Removing user from Microsoft Entra ID groups..."
     
     if ! check_user_exists; then
@@ -303,7 +304,7 @@ remove_from_groups() {
     local groups=$(az entra user get-member-groups --id "$USER_PRINCIPAL_NAME" --query "[]" -o tsv 2>/dev/null || echo "")
     
     if [[ -z "$groups" ]]; then
-        log "INFO" "User is not a member of any groups"
+        print_operation_status "Microsoft Entra ID Group Removal" "skip" "User is not a member of any groups"
         return 0
     fi
     
@@ -326,28 +327,31 @@ remove_from_groups() {
     done <<< "$groups"
     
     if [[ "$DRY_RUN" != "true" ]]; then
-        log "INFO" "Removed user from $group_count groups"
+        print_operation_status "Microsoft Entra ID Group Removal" "success" "Removed user from $group_count groups"
+    else
+        print_operation_status "Microsoft Entra ID Group Removal" "success" "[DRY RUN] Would remove user from groups"
     fi
 }
 
 # Revoke RBAC role assignments
 revoke_rbac_roles() {
     if [[ "$REVOKE_RBAC_ROLES" != "true" ]]; then
-        log "INFO" "Skipping RBAC role revocation per configuration"
+        print_operation_status "RBAC Role Revocation" "skip" "Disabled in configuration"
         return 0
     fi
     
+    print_operation_status "RBAC Role Revocation" "start" "Scanning user's role assignments"
     log "INFO" "Revoking RBAC role assignments..."
     
     local role_assignments=$(az role assignment list --assignee "$USER_PRINCIPAL_NAME" --all --output json 2>/dev/null || echo "[]")
     local role_count=$(echo "$role_assignments" | jq '. | length' 2>/dev/null || echo "0")
     
     if [[ "$role_count" -eq 0 ]]; then
-        log "INFO" "User has no RBAC role assignments"
+        print_operation_status "RBAC Role Revocation" "skip" "User has no RBAC role assignments"
         return 0
     fi
     
-    log "INFO" "Found $role_count role assignments to revoke"
+    echo -e "   ${BLUE}Found $role_count role assignments to process${NC}"
     
     local revoked_count=0
     while IFS= read -r assignment; do
@@ -370,22 +374,25 @@ revoke_rbac_roles() {
     done < <(echo "$role_assignments" | jq -c '.[]')
     
     if [[ "$DRY_RUN" != "true" ]]; then
-        log "INFO" "Revoked $revoked_count role assignments"
+        print_operation_status "RBAC Role Revocation" "success" "Revoked $revoked_count of $role_count role assignments"
+    else
+        print_operation_status "RBAC Role Revocation" "success" "[DRY RUN] Would revoke $role_count role assignments"
     fi
 }
 
 # Disable user account
 disable_user_account() {
     if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
-        log "INFO" "Skipping Entra ID user operations (--entra-operations not specified)"
+        print_operation_status "User Account Disabling" "skip" "--entra-operations not specified"
         return 0
     fi
     
     if [[ "$DISABLE_USER" != "true" ]]; then
-        log "INFO" "Skipping user account disable per configuration"
+        print_operation_status "User Account Disabling" "skip" "Disabled in configuration"
         return 0
     fi
     
+    print_operation_status "User Account Disabling" "start" "Checking user account status"
     log "INFO" "Disabling user account..."
     
     if ! check_user_exists; then
@@ -397,17 +404,17 @@ disable_user_account() {
     local account_enabled=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query accountEnabled -o tsv 2>/dev/null)
     
     if [[ "$account_enabled" == "false" ]]; then
-        log "INFO" "User account is already disabled"
+        print_operation_status "User Account Disabling" "skip" "User account is already disabled"
         return 0
     fi
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "INFO" "[DRY RUN] Would disable user account: $USER_PRINCIPAL_NAME"
+        print_operation_status "User Account Disabling" "success" "[DRY RUN] Would disable user account"
     else
         if az entra user update --id "$USER_PRINCIPAL_NAME" --account-enabled false &>/dev/null; then
-            log "INFO" "Successfully disabled user account: $USER_PRINCIPAL_NAME"
+            print_operation_status "User Account Disabling" "success" "Successfully disabled user account"
         else
-            log "ERROR" "Failed to disable user account: $USER_PRINCIPAL_NAME"
+            print_operation_status "User Account Disabling" "error" "Failed to disable user account"
             return 1
         fi
     fi
@@ -416,7 +423,7 @@ disable_user_account() {
 # Check for owned resources that need reassignment
 check_owned_resources() {
     if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
-        log "INFO" "Skipping owned resources check (--entra-operations not specified)"
+        echo -e "   ${YELLOW}⏭️  Skipping owned resources check (--entra-operations not specified)${NC}"
         return 0
     fi
     
@@ -439,29 +446,26 @@ check_owned_resources() {
         done
     fi
     
-    # Check for owned service principals
-    local owned_sps=$(az entra sp list --filter "owners/any(o:o/id eq '$user_id')" --query "[].{displayName:displayName,appId:appId}" -o json 2>/dev/null || echo "[]")
-    local sp_count=$(echo "$owned_sps" | jq '. | length')
+    local owned_objects=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query "ownedObjects[].{displayName:displayName, objectType:['@odata.type']}" -o json 2>/dev/null || echo "[]")
+    local owned_count=$(echo "$owned_objects" | jq '. | length' 2>/dev/null || echo "0")
     
-    if [[ "$sp_count" -gt 0 ]]; then
-        log "WARN" "User owns $sp_count service principal(s) that may need ownership transfer:"
-        echo "$owned_sps" | jq -r '.[] | "  - \(.displayName) (\(.appId))"' | while read -r line; do
-            log "WARN" "$line"
-        done
+    if [[ "$owned_count" -gt 0 ]]; then
+        echo -e "   ${YELLOW}⚠️  Warning: User owns $owned_count resources that may need reassignment:${NC}"
+        echo "$owned_objects" | jq -r '.[] | "      - \(.displayName) (\(.objectType))"' 2>/dev/null || true
+        log "WARN" "User owns $owned_count resources that may need manual reassignment"
+    else
+        echo -e "   ${GREEN}✅ User does not own any resources requiring reassignment${NC}"
     fi
-    
-    # Note: Checking for other resource types would require additional permissions and scope
-    log "INFO" "Resource ownership check completed"
 }
 
 # Remove SSH keys from Azure VMs (azroot account only)
 remove_vm_ssh_access() {
     if [[ "$MANAGE_VMS" != "true" ]]; then
-        log "INFO" "VM management disabled, skipping SSH access removal"
+        print_operation_status "VM SSH Access Removal" "skip" "--manage-vms not specified"
         return 0
     fi
     
-    log "INFO" "Removing SSH keys from Azure VMs (azroot account)..."
+    print_operation_status "VM SSH Access Removal" "start" "Preparing to clean SSH keys from azroot accounts"
     
     # Validate prerequisites
     if [[ -z "$VM_RESOURCE_GROUP" ]]; then
@@ -517,11 +521,13 @@ remove_vm_ssh_access() {
         fi
     done
     
-    log "INFO" "VM SSH key removal completed: $success_count/$total_vms VMs processed successfully"
+    local failed_vms=$((total_vms - success_count))
     
-    if [[ $success_count -lt $total_vms ]]; then
-        log "WARN" "Some VMs failed to process. Check the logs above for details."
-        return 1
+    if [[ "$failed_vms" -eq 0 ]]; then
+        print_operation_status "VM SSH Access Removal" "success" "SSH keys cleaned from ${#VM_NAMES[@]} VMs"
+    else
+        print_operation_status "VM SSH Access Removal" "error" "SSH key removal failed on $failed_vms out of ${#VM_NAMES[@]} VMs"
+        log "WARN" "SSH key removal failed on $failed_vms VMs"
     fi
     
     return 0
@@ -615,51 +621,30 @@ EOF
 
 # Generate offboarding summary
 generate_summary() {
-    log "INFO" "=== OFFBOARDING SUMMARY ==="
-    log "INFO" "User Principal Name: $USER_PRINCIPAL_NAME"
-    log "INFO" "Subscription: $SUBSCRIPTION_ID"
-    
-    if [[ "$DISABLE_USER" == "true" ]]; then
-        log "INFO" "User account: DISABLED"
-    else
-        log "INFO" "User account: LEFT ACTIVE"
-    fi
-    
-    if [[ "$REMOVE_FROM_GROUPS" == "true" ]]; then
-        log "INFO" "Group memberships: REMOVED"
-    else
-        log "INFO" "Group memberships: LEFT INTACT"
-    fi
-    
-    if [[ "$REVOKE_RBAC_ROLES" == "true" ]]; then
-        log "INFO" "RBAC roles: REVOKED"
-    else
-        log "INFO" "RBAC roles: LEFT INTACT"
-    fi
-    
-    if [[ "$BACKUP_DATA" == "true" ]]; then
-        log "INFO" "User data: BACKED UP"
-    else
-        log "INFO" "User data: NOT BACKED UP"
-    fi
-    
-    if [[ "$MANAGE_VMS" == "true" ]]; then
-        log "INFO" "VM Management: ENABLED"
-        log "INFO" "VM Resource Group: $VM_RESOURCE_GROUP"
-        log "INFO" "SSH Key Target: azroot account (keys will be cleared)"
-        if [[ ${#VM_NAMES[@]} -gt 0 ]]; then
-            log "INFO" "Target VMs: ${VM_NAMES[*]}"
-        fi
-    fi
+    echo -e "${BLUE}┌──────────────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${BLUE}│                        OFFBOARDING SUMMARY                      │${NC}"
+    echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${BLUE}│ User:         $USER_PRINCIPAL_NAME${NC}"
+    echo -e "${BLUE}│ Subscription: $SUBSCRIPTION_ID${NC}"
+    echo -e "${BLUE}│ Date:         $(date)${NC}"
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "INFO" "Mode: DRY RUN (no changes made)"
+        echo -e "${BLUE}│ Mode:         ${YELLOW}DRY RUN (no changes made)${BLUE}${NC}"
     else
-        log "INFO" "Mode: EXECUTION (changes applied)"
+        echo -e "${BLUE}│ Mode:         ${GREEN}EXECUTION (changes applied)${BLUE}${NC}"
     fi
     
-    log "INFO" "Log file: $LOG_FILE"
-    log "INFO" "=========================="
+    echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${BLUE}│                           OPERATIONS                            │${NC}"
+    echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
+    
+    [[ "$ENTRA_OPERATIONS" == "true" && "$REMOVE_FROM_GROUPS" == "true" ]] && echo -e "${BLUE}│ ✓ Group membership removal $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    [[ "$REVOKE_RBAC_ROLES" == "true" ]] && echo -e "${BLUE}│ ✓ RBAC role revocation     $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    [[ "$ENTRA_OPERATIONS" == "true" && "$DISABLE_USER" == "true" ]] && echo -e "${BLUE}│ ✓ User account disabling   $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    [[ "$MANAGE_VMS" == "true" ]] && echo -e "${BLUE}│ ✓ VM SSH key removal      $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    
+    echo -e "${BLUE}└──────────────────────────────────────────────────────────────────┘${NC}"
+    echo
 }
 
 # Confirmation prompt
@@ -692,43 +677,79 @@ confirm_execution() {
 
 # Main execution function
 main() {
-    echo -e "${BLUE}=== Azure User Offboarding Script ===${NC}"
+    echo
+    echo -e "${BLUE}╭═══════════════════════════════════════════════════════════════════╮${NC}"
+    echo -e "${BLUE}│                    Azure User Offboarding Script                 │${NC}"
+    echo -e "${BLUE}╰═══════════════════════════════════════════════════════════════════╯${NC}"
     echo
     
+    # Phase 1: Prerequisites and Validation
+    print_section "🔍 PHASE 1: Prerequisites & Validation" "$BLUE"
+    
+    print_progress "1" "7" "Checking prerequisites"
     check_prerequisites
+    
+    print_progress "2" "7" "Verifying permissions"
     check_permissions
+    
+    print_progress "3" "7" "Validating input parameters"
     validate_input
     
+    print_progress "4" "7" "Verifying user exists"
     if ! check_user_exists; then
-        echo -e "${RED}Error: User $USER_PRINCIPAL_NAME does not exist in Microsoft Entra ID${NC}"
+        echo -e "${RED}❌ Error: User $USER_PRINCIPAL_NAME does not exist in Microsoft Entra ID${NC}"
         exit 1
     fi
+    echo -e "${GREEN}✅ User found in Microsoft Entra ID${NC}"
     
-    echo -e "${YELLOW}Starting offboarding process for: $USER_PRINCIPAL_NAME${NC}"
+    # Phase 2: Information Gathering
+    print_section "📊 PHASE 2: Information Gathering" "$BLUE"
     
-    # Get user info before making changes
+    print_progress "5" "7" "Gathering user information"
     get_user_info
     
-    # Check for resources that might need attention
+    print_progress "6" "7" "Checking owned resources"
     check_owned_resources
     
-    # Confirm before proceeding
+    print_progress "7" "7" "Confirming execution"
     confirm_execution
+    
+    # Phase 3: Offboarding Operations
+    print_section "🚀 PHASE 3: Offboarding Operations" "$YELLOW"
+    
+    echo -e "${YELLOW}👤 Processing user: $USER_PRINCIPAL_NAME${NC}"
+    echo -e "${YELLOW}🔧 Subscription: $SUBSCRIPTION_ID${NC}"
+    echo
     
     # Execute offboarding steps
     remove_from_groups
+    echo
+    
     revoke_rbac_roles
+    echo
+    
     remove_vm_ssh_access
+    echo
+    
     disable_user_account
+    echo
+    
+    # Phase 4: Summary and Cleanup
+    print_section "📋 PHASE 4: Summary & Results" "$GREEN"
     
     generate_summary
     
-    echo -e "${GREEN}✓ Offboarding process completed successfully!${NC}"
-    echo -e "Check the log file for detailed information: ${LOG_FILE}"
+    echo
+    echo -e "${GREEN}╭═══════════════════════════════════════════════════════════════════╮${NC}"
+    echo -e "${GREEN}│                    ✅ OFFBOARDING COMPLETED                        │${NC}"
+    echo -e "${GREEN}╰═══════════════════════════════════════════════════════════════════╯${NC}"
+    echo
+    echo -e "${BLUE}📁 Log file: ${LOG_FILE}${NC}"
     
     if [[ "$BACKUP_DATA" == "true" && "$DRY_RUN" != "true" ]]; then
-        echo -e "User data backup available in: ${SCRIPT_DIR}"
+        echo -e "${BLUE}💾 User data backup: ${SCRIPT_DIR}${NC}"
     fi
+    echo
 }
 
 #################################################################################
