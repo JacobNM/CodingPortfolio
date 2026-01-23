@@ -724,7 +724,7 @@ fi
 
 if [[ ${#RBAC_ROLES[@]} -eq 0 ]]; then
     # Set default roles - adjust based on your organization's needs
-    RBAC_ROLES=("Reader")
+    RBAC_ROLES=()
 fi
 
 # Execute main function
