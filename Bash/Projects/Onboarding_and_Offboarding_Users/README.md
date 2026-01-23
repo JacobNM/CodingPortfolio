@@ -1,15 +1,29 @@
 # Azure User Onboarding and Offboarding Scripts
 
-This repository contains two comprehensive Bash scripts for automating Azure user lifecycle management using Microsoft Entra ID:
+This repository contains two comprehensive Bash scripts for automating Azure user lifecycle management with **flexible permission support**:
 
-- **`azure_user_onboarding.sh`** - Automates the process of onboarding new users to Azure resources
+- **`azure_user_onboarding.sh`** - Automates the process of onboarding users to Azure resources
 - **`azure_user_offboarding.sh`** - Automates the process of offboarding users from Azure resources
+
+**🔧 Core Functionality (Azure Owner Role):**
+- RBAC role assignments and revocation
+- VM SSH key management for azroot account
+- Azure resource access management
+- Comprehensive logging and audit trails
+
+**🔐 Optional Entra ID Functionality (Additional Permissions Required):**
+- User account creation and disabling
+- Group membership management
+- User profile management
+
+Both scripts work independently with Azure Owner permissions, with optional Microsoft Entra ID features when additional permissions are available.
 
 ## Prerequisites
 
-> **Note**: These scripts use the modern `az entra` commands instead of the deprecated `az ad` commands. Microsoft rebranded Azure Active Directory to Microsoft Entra ID, and the Azure CLI now provides dedicated Entra ID commands for better clarity and functionality.
+> **Note**: These scripts use the modern `az entra` commands for optional Entra ID operations. Core functionality works with Azure subscription permissions only.
 
-1. **Azure CLI** - Both scripts require the Azure CLI to be installed
+### Required Software
+- **Azure CLI** - Both scripts require the Azure CLI to be installed
    ```bash
    # Install Azure CLI (macOS)
    brew install azure-cli
@@ -18,13 +32,97 @@ This repository contains two comprehensive Bash scripts for automating Azure use
    az login
    ```
 
-2. **Required Permissions** - Your account needs the following roles:
-   - **User Access Administrator** - For managing RBAC role assignments
-   - **Privileged Role Administrator** - For managing Microsoft Entra ID users and groups
+### Permission Options
 
-3. **Additional Tools** (for certain features):
-   - `jq` - For JSON processing (used in offboarding script)
-   - `openssl` - For password generation (used in onboarding script)
+Choose the permission level that matches your requirements:
+
+#### Option A: Azure Owner Role (Recommended for Most Users)
+**Best for most scenarios** - provides all core functionality:
+- ✅ Full Azure subscription access
+- ✅ RBAC role management at any scope  
+- ✅ VM management and SSH key operations
+- ✅ No additional Entra ID permissions needed
+
+```bash
+# Verify you have Owner role
+az role assignment list --assignee $(az account show --query user.name -o tsv) \
+  --scope /subscriptions/$(az account show --query id -o tsv) \
+  --query "[?roleDefinitionName=='Owner']"
+```
+
+#### Option B: Enhanced with Entra ID Permissions
+For full functionality including user/group management, add:
+
+**Microsoft Entra ID Roles** (choose one):
+- **User Administrator** - For creating/disabling users and managing group memberships
+- **Groups Administrator** - For group management only (if users are managed separately)
+
+```bash
+# Check your Entra ID roles
+az rest --method GET --uri "https://graph.microsoft.com/v1.0/me/memberOf" \
+  --query "value[?startswith(@odata.type,'#microsoft.graph.directoryRole')].displayName"
+```
+
+### Additional Tools
+- `jq` - For JSON processing (used in offboarding script)
+- `openssl` - For password generation (used in onboarding script when creating users)
+
+## Quick Start Examples
+
+### Scenario 1: Azure Owner Role Only (Most Common)
+
+If you have Azure subscription Owner role but no special Entra ID permissions:
+
+```bash
+# Onboard existing user - assign Azure roles and VM access
+./azure_user_onboarding.sh \
+  -u jane.doe@company.com \
+  -s "12345678-1234-1234-1234-123456789012" \
+  -R "Contributor,Storage Blob Data Reader" \
+  --manage-vms --vm-resource-group "production-vms" \
+  --ssh-public-key "~/.ssh/id_rsa.pub"
+
+# Offboard user - remove Azure access and VM keys  
+./azure_user_offboarding.sh \
+  -u jane.doe@company.com \
+  -s "12345678-1234-1234-1234-123456789012" \
+  --manage-vms --vm-resource-group "production-vms"
+```
+
+### Scenario 2: Full Entra ID + Azure Management
+
+If you have both Entra ID and Azure permissions:
+
+```bash
+# Full onboard - create user, assign groups, assign roles, setup VM access
+./azure_user_onboarding.sh \
+  -u john.smith@company.com \
+  -d "John Smith" \
+  -s "12345678-1234-1234-1234-123456789012" \
+  --entra-operations \
+  -g "IT-Team,Developers" \
+  -R "Contributor" \
+  --manage-vms --vm-resource-group "dev-vms" \
+  --ssh-public-key "ssh-rsa AAAAB3NzaC1yc2E..."
+
+# Full offboard - disable user, remove from groups, revoke roles, clear VM access
+./azure_user_offboarding.sh \
+  -u john.smith@company.com \
+  -s "12345678-1234-1234-1234-123456789012" \
+  --entra-operations \
+  --manage-vms --vm-resource-group "dev-vms"
+```
+
+### Always Test First!
+
+```bash
+# Use dry-run mode to preview changes
+./azure_user_onboarding.sh \
+  -u test.user@company.com \
+  -s "your-subscription-id" \
+  -R "Reader" \
+  --dry-run
+```
 
 ## Onboarding Script (`azure_user_onboarding.sh`)
 
