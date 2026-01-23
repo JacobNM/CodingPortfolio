@@ -31,6 +31,9 @@ REMOVE_FROM_GROUPS=true
 REVOKE_RBAC_ROLES=true
 BACKUP_DATA=true
 FORCE_EXECUTION=false
+MANAGE_VMS=false
+VM_RESOURCE_GROUP=""
+VM_NAMES=()
 
 #################################################################################
 # Functions
@@ -59,6 +62,9 @@ Optional Parameters:
     --no-remove-groups      Skip removing user from Microsoft Entra ID groups (default: remove)
     --no-revoke-roles       Skip revoking RBAC role assignments (default: revoke)
     --no-backup            Skip creating backup of user's access (default: create backup)
+    --manage-vms            Enable VM SSH key management
+    --vm-resource-group     Resource group containing the VMs (required if --manage-vms)
+    --vm-names              Comma-separated list of VM names to manage
     -f, --force            Force execution without confirmation prompts
     -n, --dry-run          Preview changes without executing them
     -h, --help             Display this help message
@@ -69,6 +75,10 @@ Examples:
     
     # Offboarding but keep user account active (just remove access)
     $0 -u jane.smith@company.com -s "12345678-1234-1234-1234-123456789012" --no-disable-user
+    
+    # Offboarding with VM SSH key removal
+    $0 -u dev.user@company.com -s "12345678-1234-1234-1234-123456789012" \\
+       --manage-vms --vm-resource-group "vm-rg" --vm-names "web01,web02,db01"
     
     # Dry run to preview changes
     $0 -u test.user@company.com -s "12345678-1234-1234-1234-123456789012" -n
@@ -369,6 +379,165 @@ check_owned_resources() {
     log "INFO" "Resource ownership check completed"
 }
 
+# Remove SSH keys from Azure VMs (azroot account only)
+remove_vm_ssh_access() {
+    if [[ "$MANAGE_VMS" != "true" ]]; then
+        log "INFO" "VM management disabled, skipping SSH access removal"
+        return 0
+    fi
+    
+    log "INFO" "Removing SSH keys from Azure VMs (azroot account)..."
+    
+    # Validate prerequisites
+    if [[ -z "$VM_RESOURCE_GROUP" ]]; then
+        log "ERROR" "VM resource group is required for VM management"
+        return 1
+    fi
+    
+    if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
+        log "INFO" "No VM names specified, discovering VMs in resource group: $VM_RESOURCE_GROUP"
+        
+        # Get all Linux VMs in the resource group
+        local discovered_vms=$(az vm list -g "$VM_RESOURCE_GROUP" --query "[?storageProfile.osDisk.osType=='Linux'].name" -o tsv)
+        
+        if [[ -z "$discovered_vms" ]]; then
+            log "WARN" "No Linux VMs found in resource group: $VM_RESOURCE_GROUP"
+            return 0
+        fi
+        
+        # Convert to array
+        IFS=$'\n' read -ra VM_NAMES <<< "$discovered_vms"
+        log "INFO" "Discovered ${#VM_NAMES[@]} Linux VMs: ${VM_NAMES[*]}"
+    fi
+    
+    # Process each VM
+    local success_count=0
+    local total_vms=${#VM_NAMES[@]}
+    
+    for vm_name in "${VM_NAMES[@]}"; do
+        log "INFO" "Processing VM: $vm_name"
+        
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log "INFO" "[DRY RUN] Would remove SSH keys from azroot account on VM: $vm_name"
+            ((success_count++))
+            continue
+        fi
+        
+        # Check if VM exists and is running
+        local vm_state=$(az vm get-instance-view -g "$VM_RESOURCE_GROUP" -n "$vm_name" --query "instanceView.statuses[1].displayStatus" -o tsv 2>/dev/null)
+        
+        if [[ -z "$vm_state" ]]; then
+            log "ERROR" "VM not found: $vm_name"
+            continue
+        fi
+        
+        if [[ "$vm_state" != "VM running" ]]; then
+            log "WARN" "VM is not running: $vm_name (state: $vm_state)"
+            log "INFO" "Attempting to remove SSH keys anyway..."
+        fi
+        
+        # Remove SSH keys using Azure VM extension
+        if remove_ssh_keys_from_vm "$vm_name"; then
+            ((success_count++))
+        fi
+    done
+    
+    log "INFO" "VM SSH key removal completed: $success_count/$total_vms VMs processed successfully"
+    
+    if [[ $success_count -lt $total_vms ]]; then
+        log "WARN" "Some VMs failed to process. Check the logs above for details."
+        return 1
+    fi
+    
+    return 0
+}
+
+# Remove SSH keys from azroot account on a specific VM
+remove_ssh_keys_from_vm() {
+    local vm_name="$1"
+    
+    log "INFO" "Removing SSH keys from azroot account on VM: $vm_name"
+    
+    # Create a temporary script for VM execution
+    local temp_script=$(mktemp)
+    cat > "$temp_script" << EOF
+#!/bin/bash
+set -euo pipefail
+
+AZROOT_HOME="/home/azroot"
+SSH_DIR="\$AZROOT_HOME/.ssh"
+AUTHORIZED_KEYS="\$SSH_DIR/authorized_keys"
+
+# Function to log with timestamp
+log_vm() {
+    echo "\$(date '+%Y-%m-%d %H:%M:%S') [\$1] \$2"
+}
+
+log_vm "INFO" "Removing SSH keys from azroot account"
+
+# Check if authorized_keys exists
+if [[ ! -f "\$AUTHORIZED_KEYS" ]]; then
+    log_vm "INFO" "No authorized_keys file found for azroot account"
+    exit 0
+fi
+
+# Backup authorized_keys before modification
+cp "\$AUTHORIZED_KEYS" "\$AUTHORIZED_KEYS.backup.\$(date +%Y%m%d_%H%M%S)"
+log_vm "INFO" "Backed up authorized_keys file"
+
+# Clear the authorized_keys file (remove all SSH keys)
+> "\$AUTHORIZED_KEYS"
+chown azroot:azroot "\$AUTHORIZED_KEYS"
+chmod 600 "\$AUTHORIZED_KEYS"
+
+log_vm "INFO" "Cleared all SSH keys from azroot authorized_keys"
+log_vm "INFO" "SSH key removal completed for azroot account"
+EOF
+
+    # Execute the script on the VM using Azure VM extension
+    local extension_name="ssh-remove-$(date +%s)"
+    
+    log "INFO" "Executing SSH key removal script on VM: $vm_name"
+    
+    if az vm extension set \
+        --resource-group "$VM_RESOURCE_GROUP" \
+        --vm-name "$vm_name" \
+        --name CustomScript \
+        --publisher Microsoft.Azure.Extensions \
+        --settings "{\"fileUris\": [], \"commandToExecute\": \"bash -s\"}" \
+        --protected-settings "{\"script\": \"$(base64 -i "$temp_script")\"}" \
+        --no-wait &>/dev/null; then
+        
+        log "INFO" "SSH key removal script deployed to VM: $vm_name"
+        
+        # Wait a moment for execution
+        sleep 5
+        
+        # Check extension status
+        local extension_status=$(az vm extension show \
+            --resource-group "$VM_RESOURCE_GROUP" \
+            --vm-name "$vm_name" \
+            --name CustomScript \
+            --query "provisioningState" -o tsv 2>/dev/null || echo "Unknown")
+        
+        if [[ "$extension_status" == "Succeeded" ]]; then
+            log "INFO" "Successfully removed SSH keys from VM: $vm_name"
+            rm -f "$temp_script"
+            return 0
+        else
+            log "WARN" "Extension status unclear for VM: $vm_name (status: $extension_status)"
+            log "INFO" "SSH key removal may still be in progress"
+        fi
+    else
+        log "ERROR" "Failed to deploy SSH key removal script to VM: $vm_name"
+        rm -f "$temp_script"
+        return 1
+    fi
+    
+    rm -f "$temp_script"
+    return 0
+}
+
 # Generate offboarding summary
 generate_summary() {
     log "INFO" "=== OFFBOARDING SUMMARY ==="
@@ -399,6 +568,15 @@ generate_summary() {
         log "INFO" "User data: NOT BACKED UP"
     fi
     
+    if [[ "$MANAGE_VMS" == "true" ]]; then
+        log "INFO" "VM Management: ENABLED"
+        log "INFO" "VM Resource Group: $VM_RESOURCE_GROUP"
+        log "INFO" "SSH Key Target: azroot account (keys will be cleared)"
+        if [[ ${#VM_NAMES[@]} -gt 0 ]]; then
+            log "INFO" "Target VMs: ${VM_NAMES[*]}"
+        fi
+    fi
+    
     if [[ "$DRY_RUN" == "true" ]]; then
         log "INFO" "Mode: DRY RUN (no changes made)"
     else
@@ -422,9 +600,12 @@ confirm_execution() {
     echo
     echo "Actions to be performed:"
     [[ "$DISABLE_USER" == "true" ]] && echo "  ✓ Disable user account"
-    [[ "$REMOVE_FROM_GROUPS" == "true" ]] && echo "  ✓ Remove from Azure AD groups"
+    [[ "$REMOVE_FROM_GROUPS" == "true" ]] && echo "  ✓ Remove from Microsoft Entra ID groups"
     [[ "$REVOKE_RBAC_ROLES" == "true" ]] && echo "  ✓ Revoke RBAC role assignments"
     [[ "$BACKUP_DATA" == "true" ]] && echo "  ✓ Create backup of user access data"
+    if [[ "$MANAGE_VMS" == "true" ]]; then
+        echo "  ✓ Clear SSH keys from azroot account on VMs"
+    fi
     echo
     
     read -p "Do you want to proceed? (yes/no): " -r
@@ -462,6 +643,7 @@ main() {
     # Execute offboarding steps
     remove_from_groups
     revoke_rbac_roles
+    remove_vm_ssh_access
     disable_user_account
     
     generate_summary
@@ -504,6 +686,18 @@ while [[ $# -gt 0 ]]; do
         --no-backup)
             BACKUP_DATA=false
             shift
+            ;;
+        --manage-vms)
+            MANAGE_VMS=true
+            shift
+            ;;
+        --vm-resource-group)
+            VM_RESOURCE_GROUP="$2"
+            shift 2
+            ;;
+        --vm-names)
+            IFS=',' read -ra VM_NAMES <<< "$2"
+            shift 2
             ;;
         -f|--force)
             FORCE_EXECUTION=true
