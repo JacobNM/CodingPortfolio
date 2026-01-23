@@ -2,9 +2,11 @@
 
 #################################################################################
 # Azure User Offboarding Script
-# Description: Automates the offboarding process for users from Azure resources using Microsoft Entra ID
+# Description: Automates the offboarding process for users from Azure resources
+#              Supports optional Microsoft Entra ID operations (requires additional permissions)
+#              Core functionality works with Azure subscription Owner role
 # Author: Your Organization
-# Version: 1.0
+# Version: 2.0
 # Last Modified: $(date)
 #################################################################################
 
@@ -13,7 +15,10 @@ set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/offboarding_$(date +%Y%m%d_%H%M%S).log"
-REQUIRED_ROLES=("User Access Administrator" "Privileged Role Administrator")
+# Azure subscription roles (Owner role provides all these)
+REQUIRED_AZURE_ROLES=("User Access Administrator" "Virtual Machine Contributor")
+# Entra ID roles (only needed if --entra-operations is enabled)
+REQUIRED_ENTRA_ROLES=("User Administrator" "Groups Administrator")
 
 # Color codes for output
 RED='\033[0;31m'
@@ -31,6 +36,7 @@ REMOVE_FROM_GROUPS=true
 REVOKE_RBAC_ROLES=true
 BACKUP_DATA=true
 FORCE_EXECUTION=false
+ENTRA_OPERATIONS=false
 MANAGE_VMS=false
 VM_RESOURCE_GROUP=""
 VM_NAMES=()
@@ -53,13 +59,23 @@ usage() {
     cat << EOF
 Usage: $0 -u <user_principal_name> -s <subscription_id> [OPTIONS]
 
+**CORE FUNCTIONALITY (requires Azure Owner role):**
+- RBAC role revocation
+- VM SSH key removal
+- Resource access removal
+
+**ENTRA ID FUNCTIONALITY (requires additional Entra ID permissions):**
+- User account disabling
+- Group membership removal
+
 Required Parameters:
     -u, --user-principal     User Principal Name (UPN) - email address of the user
     -s, --subscription       Azure subscription ID
 
 Optional Parameters:
-    --no-disable-user       Skip disabling the user account (default: disable user)
-    --no-remove-groups      Skip removing user from Microsoft Entra ID groups (default: remove)
+    --entra-operations       Enable Microsoft Entra ID operations (user disable, group removal)
+    --no-disable-user       Skip disabling the user account (only applies with --entra-operations)
+    --no-remove-groups      Skip removing user from Entra ID groups (only applies with --entra-operations)
     --no-revoke-roles       Skip revoking RBAC role assignments (default: revoke)
     --no-backup            Skip creating backup of user's access (default: create backup)
     --manage-vms            Enable VM SSH key management
@@ -70,13 +86,16 @@ Optional Parameters:
     -h, --help             Display this help message
 
 Examples:
-    # Full offboarding with all default actions
+    # Basic offboarding - revoke RBAC roles only (requires Azure Owner role)
     $0 -u john.doe@company.com -s "12345678-1234-1234-1234-123456789012"
     
-    # Offboarding but keep user account active (just remove access)
-    $0 -u jane.smith@company.com -s "12345678-1234-1234-1234-123456789012" --no-disable-user
+    # Full offboarding with Entra ID operations (requires Entra ID permissions)
+    $0 -u jane.smith@company.com -s "12345678-1234-1234-1234-123456789012" --entra-operations
     
-    # Offboarding with VM SSH key removal
+    # Keep user active but remove Azure access (no Entra ID needed)
+    $0 -u existing.user@company.com -s "12345678-1234-1234-1234-123456789012" --no-revoke-roles
+    
+    # Offboard user with VM SSH key removal
     $0 -u dev.user@company.com -s "12345678-1234-1234-1234-123456789012" \\
        --manage-vms --vm-resource-group "vm-rg" --vm-names "web01,web02,db01"
     
@@ -84,7 +103,7 @@ Examples:
     $0 -u test.user@company.com -s "12345678-1234-1234-1234-123456789012" -n
     
     # Force execution without prompts (for automation)
-    $0 -u automated.user@company.com -s "12345678-1234-1234-1234-123456789012" -f
+    $0 -u automated.user@company.com -s "12345678-1234-1234-1234-123456789012" --entra-operations -f
 
 EOF
 }
@@ -121,16 +140,33 @@ check_permissions() {
     local current_user=$(az account show --query user.name -o tsv)
     log "INFO" "Current user: $current_user"
     
-    # Check if user has required roles at subscription level
-    for role in "${REQUIRED_ROLES[@]}"; do
-        local has_role=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \
-                        --query "[?roleDefinitionName=='$role']" -o tsv)
-        if [[ -z "$has_role" ]]; then
-            log "WARN" "Missing required role: $role. Some operations may fail."
-        else
-            log "INFO" "Confirmed role: $role"
-        fi
-    done
+    # Check Azure subscription roles (always required)
+    log "INFO" "Checking Azure subscription permissions..."
+    local has_owner=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \\
+                     --query "[?roleDefinitionName=='Owner']" -o tsv)
+    if [[ -n "$has_owner" ]]; then
+        log "INFO" "✓ Owner role confirmed - all Azure operations permitted"
+    else
+        log "INFO" "Checking individual Azure roles..."
+        for role in "${REQUIRED_AZURE_ROLES[@]}"; do
+            local has_role=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \\
+                            --query "[?roleDefinitionName=='$role']" -o tsv)
+            if [[ -z "$has_role" ]]; then
+                log "WARN" "Missing Azure role: $role. Some operations may fail."
+            else
+                log "INFO" "✓ Confirmed Azure role: $role"
+            fi
+        done
+    fi
+    
+    # Check Entra ID permissions only if required
+    if [[ "$ENTRA_OPERATIONS" == "true" ]]; then
+        log "INFO" "Checking Microsoft Entra ID permissions..."
+        log "WARN" "Entra ID operations enabled - ensure you have User Administrator or Groups Administrator role"
+        log "INFO" "If Entra ID operations fail, consider running without --entra-operations"
+    else
+        log "INFO" "Entra ID operations disabled - Azure access removal only"
+    fi
 }
 
 # Validate user input
@@ -148,6 +184,21 @@ validate_input() {
         log "ERROR" "Invalid subscription ID format: $SUBSCRIPTION_ID"
         exit 1
     fi
+    
+    # Validate Entra ID specific requirements
+    if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
+        if [[ "$DISABLE_USER" == "true" ]] || [[ "$REMOVE_FROM_GROUPS" == "true" ]]; then
+            log "INFO" "Entra ID operations (disable user, remove groups) disabled without --entra-operations"
+            DISABLE_USER=false
+            REMOVE_FROM_GROUPS=false
+        fi
+        log "INFO" "Working with existing user (Azure access removal only)"
+    else
+        log "INFO" "Entra ID operations enabled - will disable user and remove from groups if requested"
+    fi
+    
+    log "INFO" "Input validation completed successfully"
+}
     
     log "INFO" "Input validation completed successfully"
 }
@@ -173,11 +224,6 @@ get_user_info() {
     
     local user_info_file="${SCRIPT_DIR}/user_backup_${USER_PRINCIPAL_NAME//[@.]/_}_$(date +%Y%m%d_%H%M%S).json"
     
-    if ! check_user_exists; then
-        log "WARN" "Cannot gather user info - user does not exist"
-        return 1
-    fi
-    
     if [[ "$BACKUP_DATA" != "true" ]]; then
         log "INFO" "Skipping user data backup per configuration"
         return 0
@@ -185,17 +231,31 @@ get_user_info() {
     
     log "INFO" "Creating user data backup..."
     
-    # Get basic user information
-    local user_details=$(az entra user show --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo "{}")
+    # Initialize backup structure
+    local user_details='{}' 
+    local group_memberships='[]'
+    local owned_apps='[]'
     
-    # Get user's group memberships
-    local group_memberships=$(az entra user get-member-groups --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo "[]")
+    # Only get Entra ID data if operations are enabled
+    if [[ "$ENTRA_OPERATIONS" == "true" ]]; then
+        if ! check_user_exists; then
+            log "WARN" "Cannot gather Entra ID user info - user does not exist"
+        else
+            # Get basic user information
+            user_details=$(az entra user show --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo '{}')
+            
+            # Get user's group memberships
+            group_memberships=$(az entra user get-member-groups --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo '[]')
+            
+            # Get user's owned applications (if any)
+            owned_apps=$(az entra app list --filter "owners/any(o:o/id eq '$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)')" --output json 2>/dev/null || echo '[]')
+        fi
+    else
+        log "INFO" "Skipping Entra ID data collection (--entra-operations not specified)"
+    fi
     
-    # Get user's role assignments across all scopes
-    local role_assignments=$(az role assignment list --assignee "$USER_PRINCIPAL_NAME" --all --output json 2>/dev/null || echo "[]")
-    
-    # Get user's owned applications (if any)
-    local owned_apps=$(az entra app list --filter "owners/any(o:o/id eq '$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)')" --output json 2>/dev/null || echo "[]")
+    # Get user's role assignments across all scopes (Azure subscription level)
+    local role_assignments=$(az role assignment list --assignee "$USER_PRINCIPAL_NAME" --all --output json 2>/dev/null || echo '[]')
     
     # Create comprehensive backup
     cat > "$user_info_file" << EOF
@@ -222,6 +282,11 @@ EOF
 
 # Remove user from Microsoft Entra ID groups
 remove_from_groups() {
+    if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
+        log "INFO" "Skipping Entra ID group operations (--entra-operations not specified)"
+        return 0
+    fi
+    
     if [[ "$REMOVE_FROM_GROUPS" != "true" ]]; then
         log "INFO" "Skipping group removal per configuration"
         return 0
@@ -311,6 +376,11 @@ revoke_rbac_roles() {
 
 # Disable user account
 disable_user_account() {
+    if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
+        log "INFO" "Skipping Entra ID user operations (--entra-operations not specified)"
+        return 0
+    fi
+    
     if [[ "$DISABLE_USER" != "true" ]]; then
         log "INFO" "Skipping user account disable per configuration"
         return 0
@@ -345,6 +415,11 @@ disable_user_account() {
 
 # Check for owned resources that need reassignment
 check_owned_resources() {
+    if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
+        log "INFO" "Skipping owned resources check (--entra-operations not specified)"
+        return 0
+    fi
+    
     log "INFO" "Checking for resources owned by the user..."
     
     if ! check_user_exists; then
