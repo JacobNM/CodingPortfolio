@@ -2,10 +2,7 @@
 
 #################################################################################
 # Azure User Onboarding Script
-# Description: Automates the onboarding process for new users to Azure resources
-# Author: Your Organization
-# Version: 1.0
-# Last Modified: $(date)
+# Description: Automates the onboarding process for new users to Azure resources using Microsoft Entra ID
 #################################################################################
 
 set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
@@ -27,7 +24,7 @@ RESOURCE_GROUP=""
 SUBSCRIPTION_ID=""
 USER_PRINCIPAL_NAME=""
 DISPLAY_NAME=""
-AZURE_AD_GROUPS=()
+ENTRA_ID_GROUPS=()
 RBAC_ROLES=()
 DRY_RUN=false
 SEND_WELCOME_EMAIL=false
@@ -57,7 +54,7 @@ Required Parameters:
 
 Optional Parameters:
     -r, --resource-group     Specific resource group to grant access to
-    -g, --azure-groups       Comma-separated list of Azure AD groups to add user to
+    -g, --entra-groups       Comma-separated list of Microsoft Entra ID groups to add user to
     -R, --rbac-roles         Comma-separated list of RBAC roles to assign
     -n, --dry-run           Preview changes without executing them
     -e, --send-email        Send welcome email with access details
@@ -141,29 +138,29 @@ validate_input() {
     log "INFO" "Input validation completed successfully"
 }
 
-# Check if user already exists in Azure AD
+# Check if user already exists in Microsoft Entra ID
 check_user_exists() {
-    log "INFO" "Checking if user already exists in Azure AD..."
+    log "INFO" "Checking if user already exists in Microsoft Entra ID..."
     
-    local existing_user=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
+    local existing_user=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
     
     if [[ -n "$existing_user" ]]; then
-        log "INFO" "User already exists in Azure AD: $existing_user"
+        log "INFO" "User already exists in Microsoft Entra ID: $existing_user"
         return 0
     else
-        log "INFO" "User does not exist in Azure AD"
+        log "INFO" "User does not exist in Microsoft Entra ID"
         return 1
     fi
 }
 
-# Create user in Azure AD (if needed)
-create_azure_ad_user() {
+# Create user in Microsoft Entra ID (if needed)
+create_entra_id_user() {
     if check_user_exists; then
         log "INFO" "Skipping user creation - user already exists"
         return 0
     fi
     
-    log "INFO" "Creating new user in Azure AD..."
+    log "INFO" "Creating new user in Microsoft Entra ID..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
         log "INFO" "[DRY RUN] Would create user: $USER_PRINCIPAL_NAME with display name: $DISPLAY_NAME"
@@ -174,7 +171,7 @@ create_azure_ad_user() {
     local temp_password=$(openssl rand -base64 12)
     
     # Create the user
-    local user_id=$(az ad user create \
+    local user_id=$(az entra user create \
         --user-principal-name "$USER_PRINCIPAL_NAME" \
         --display-name "$DISPLAY_NAME" \
         --password "$temp_password" \
@@ -190,22 +187,22 @@ create_azure_ad_user() {
     fi
 }
 
-# Add user to Azure AD groups
-add_to_azure_groups() {
-    if [[ ${#AZURE_AD_GROUPS[@]} -eq 0 ]]; then
-        log "INFO" "No Azure AD groups specified, skipping group assignments"
+# Add user to Microsoft Entra ID groups
+add_to_entra_groups() {
+    if [[ ${#ENTRA_ID_GROUPS[@]} -eq 0 ]]; then
+        log "INFO" "No Microsoft Entra ID groups specified, skipping group assignments"
         return 0
     fi
     
-    log "INFO" "Adding user to Azure AD groups..."
+    log "INFO" "Adding user to Microsoft Entra ID groups..."
     
-    local user_id=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
+    local user_id=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
     
-    for group_name in "${AZURE_AD_GROUPS[@]}"; do
+    for group_name in "${ENTRA_ID_GROUPS[@]}"; do
         log "INFO" "Processing group: $group_name"
         
         # Find the group
-        local group_id=$(az ad group show --group "$group_name" --query id -o tsv 2>/dev/null || echo "")
+        local group_id=$(az entra group show --group "$group_name" --query id -o tsv 2>/dev/null || echo "")
         
         if [[ -z "$group_id" ]]; then
             log "WARN" "Group '$group_name' not found, skipping"
@@ -213,7 +210,7 @@ add_to_azure_groups() {
         fi
         
         # Check if user is already a member
-        local is_member=$(az ad group member check --group "$group_id" --member-id "$user_id" --query value -o tsv)
+        local is_member=$(az entra group member check --group "$group_id" --member-id "$user_id" --query value -o tsv)
         
         if [[ "$is_member" == "true" ]]; then
             log "INFO" "User already member of group: $group_name"
@@ -223,7 +220,7 @@ add_to_azure_groups() {
         if [[ "$DRY_RUN" == "true" ]]; then
             log "INFO" "[DRY RUN] Would add user to group: $group_name ($group_id)"
         else
-            az ad group member add --group "$group_id" --member-id "$user_id"
+            az entra group member add --group "$group_id" --member-id "$user_id"
             log "INFO" "Successfully added user to group: $group_name"
         fi
     done
@@ -285,8 +282,8 @@ generate_summary() {
         log "INFO" "Resource Group: $RESOURCE_GROUP"
     fi
     
-    if [[ ${#AZURE_AD_GROUPS[@]} -gt 0 ]]; then
-        log "INFO" "Azure AD Groups: ${AZURE_AD_GROUPS[*]}"
+    if [[ ${#ENTRA_ID_GROUPS[@]} -gt 0 ]]; then
+        log "INFO" "Microsoft Entra ID Groups: ${ENTRA_ID_GROUPS[*]}"
     fi
     
     if [[ ${#RBAC_ROLES[@]} -gt 0 ]]; then
@@ -337,8 +334,8 @@ main() {
     
     echo -e "${YELLOW}Starting onboarding process for: $USER_PRINCIPAL_NAME${NC}"
     
-    create_azure_ad_user
-    add_to_azure_groups
+    create_entra_id_user
+    add_to_entra_groups
     assign_rbac_roles
     send_welcome_email
     
@@ -371,8 +368,8 @@ while [[ $# -gt 0 ]]; do
             RESOURCE_GROUP="$2"
             shift 2
             ;;
-        -g|--azure-groups)
-            IFS=',' read -ra AZURE_AD_GROUPS <<< "$2"
+        -g|--entra-groups)
+            IFS=',' read -ra ENTRA_ID_GROUPS <<< "$2"
             shift 2
             ;;
         -R|--rbac-roles)
@@ -408,9 +405,9 @@ if [[ -z "$USER_PRINCIPAL_NAME" || -z "$DISPLAY_NAME" || -z "$SUBSCRIPTION_ID" ]
 fi
 
 # Set default values if not specified
-if [[ ${#AZURE_AD_GROUPS[@]} -eq 0 ]]; then
+if [[ ${#ENTRA_ID_GROUPS[@]} -eq 0 ]]; then
     # Add default groups here if desired
-    AZURE_AD_GROUPS=()
+    ENTRA_ID_GROUPS=()
 fi
 
 if [[ ${#RBAC_ROLES[@]} -eq 0 ]]; then
