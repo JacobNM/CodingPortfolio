@@ -1,11 +1,13 @@
 # Azure User Onboarding and Offboarding Scripts
 
-This repository contains two comprehensive Bash scripts for automating Azure user lifecycle management:
+This repository contains two comprehensive Bash scripts for automating Azure user lifecycle management using Microsoft Entra ID:
 
 - **`azure_user_onboarding.sh`** - Automates the process of onboarding new users to Azure resources
 - **`azure_user_offboarding.sh`** - Automates the process of offboarding users from Azure resources
 
 ## Prerequisites
+
+> **Note**: These scripts use the modern `az entra` commands instead of the deprecated `az ad` commands. Microsoft rebranded Azure Active Directory to Microsoft Entra ID, and the Azure CLI now provides dedicated Entra ID commands for better clarity and functionality.
 
 1. **Azure CLI** - Both scripts require the Azure CLI to be installed
    ```bash
@@ -18,7 +20,7 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 
 2. **Required Permissions** - Your account needs the following roles:
    - **User Access Administrator** - For managing RBAC role assignments
-   - **Privileged Role Administrator** - For managing Azure AD users and groups
+   - **Privileged Role Administrator** - For managing Microsoft Entra ID users and groups
 
 3. **Additional Tools** (for certain features):
    - `jq` - For JSON processing (used in offboarding script)
@@ -27,8 +29,8 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 ## Onboarding Script (`azure_user_onboarding.sh`)
 
 ### Features
-- Creates new Azure AD users (if they don't exist)
-- Adds users to specified Azure AD groups
+- Creates new Microsoft Entra ID users (if they don't exist)
+- Adds users to specified Microsoft Entra ID groups
 - Assigns RBAC roles at subscription or resource group level
 - Comprehensive logging and audit trail
 - Dry-run mode for testing
@@ -74,7 +76,7 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 | `-d, --display-name` | Display name for the user | Yes |
 | `-s, --subscription` | Azure subscription ID | Yes |
 | `-r, --resource-group` | Specific resource group to grant access to | No |
-| `-g, --azure-groups` | Comma-separated list of Azure AD groups | No |
+| `-g, --entra-groups` | Comma-separated list of Microsoft Entra ID groups | No |
 | `-R, --rbac-roles` | Comma-separated list of RBAC roles to assign | No |
 | `-n, --dry-run` | Preview changes without executing them | No |
 | `-e, --send-email` | Send welcome email with access details | No |
@@ -83,8 +85,8 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 ## Offboarding Script (`azure_user_offboarding.sh`)
 
 ### Features
-- Disables Azure AD user accounts
-- Removes users from all Azure AD groups
+- Disables Microsoft Entra ID user accounts
+- Removes users from all Microsoft Entra ID groups
 - Revokes all RBAC role assignments
 - Creates comprehensive backup of user's access data
 - Identifies owned resources that need reassignment
@@ -132,7 +134,7 @@ This repository contains two comprehensive Bash scripts for automating Azure use
 | `-u, --user-principal` | User Principal Name (email address) | Yes |
 | `-s, --subscription` | Azure subscription ID | Yes |
 | `--no-disable-user` | Skip disabling the user account | No |
-| `--no-remove-groups` | Skip removing user from Azure AD groups | No |
+| `--no-remove-groups` | Skip removing user from Microsoft Entra ID groups | No |
 | `--no-revoke-roles` | Skip revoking RBAC role assignments | No |
 | `--no-backup` | Skip creating backup of user's access | No |
 | `-f, --force` | Force execution without confirmation prompts | No |
@@ -211,7 +213,7 @@ These scripts can be integrated into:
 ### Common Issues
 
 1. **Permission Denied**
-   - Verify your account has the required Azure AD and RBAC roles
+   - Verify your account has the required Microsoft Entra ID and RBAC roles
    - Check if you're logged into the correct Azure tenant
 
 2. **User Already Exists**
