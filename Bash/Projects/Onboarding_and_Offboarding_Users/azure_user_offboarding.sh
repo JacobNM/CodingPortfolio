@@ -32,6 +32,9 @@ NC='\033[0m' # No Color
 # Default values
 SUBSCRIPTION_ID=""
 USER_PRINCIPAL_NAME=""
+RESOURCE_GROUP=""
+SPECIFIC_ROLES=()
+SPECIFIC_GROUPS=()
 DRY_RUN=false
 DISABLE_USER=true
 REMOVE_FROM_GROUPS=true
@@ -128,6 +131,9 @@ Required Parameters:
     -s, --subscription       Azure subscription ID
 
 Optional Parameters:
+    -r, --resource-group     Target specific resource group (default: all scopes)
+    -R, --roles              Specific roles to remove (comma-separated, default: all roles)
+    -G, --groups             Specific groups to remove user from (comma-separated, default: all groups)
     --entra-operations       Enable Microsoft Entra ID operations (user disable, group removal)
     --no-disable-user       Skip disabling the user account (only applies with --entra-operations)
     --no-remove-groups      Skip removing user from Entra ID groups (only applies with --entra-operations)
@@ -143,6 +149,14 @@ Optional Parameters:
 Examples:
     # Basic offboarding - revoke RBAC roles only (requires Azure Owner role)
     $0 -u john.doe@company.com -s "12345678-1234-1234-1234-123456789012"
+    
+    # Remove specific roles from a specific resource group
+    $0 -u user@company.com -s "12345678-1234-1234-1234-123456789012" \\
+       -r "Production" -R "Reader,Contributor" --dry-run
+    
+    # Remove from specific Entra ID groups only
+    $0 -u user@company.com -s "12345678-1234-1234-1234-123456789012" \\
+       --entra-operations -G "Developers,DevOps" --dry-run
     
     # Full offboarding with Entra ID operations (requires Entra ID permissions)
     $0 -u jane.smith@company.com -s "12345678-1234-1234-1234-123456789012" --entra-operations
@@ -447,36 +461,68 @@ remove_from_groups() {
         return 1
     fi
     
-    local user_id=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
-    local groups=$(az entra user get-member-groups --id "$USER_PRINCIPAL_NAME" --query "[]" -o tsv 2>/dev/null || echo "")
+    local user_id=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
+    local user_groups=$(az ad user get-member-groups --id "$user_id" --query "[]" -o tsv 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
     
-    if [[ -z "$groups" ]]; then
+    if [[ -z "$user_groups" ]]; then
         print_operation_status "Microsoft Entra ID Group Removal" "skip" "User is not a member of any groups"
         return 0
     fi
     
+    # Filter by specific groups if provided
+    if [[ ${#SPECIFIC_GROUPS[@]} -gt 0 ]]; then
+        log "INFO" "Filtering to specific groups: ${SPECIFIC_GROUPS[*]}"
+        echo -e "   ${BLUE}Filtering to specific groups: ${SPECIFIC_GROUPS[*]}${NC}"
+    fi
+    
     local group_count=0
+    local removed_count=0
     while IFS= read -r group_id; do
-        if [[ -n "$group_id" ]]; then
-            local group_name=$(az entra group show --group "$group_id" --query displayName -o tsv 2>/dev/null || echo "Unknown")
+        if [[ -n "$group_id" ]] && [[ "$group_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            local group_name=$(az ad group show --group "$group_id" --query displayName -o tsv 2>/dev/null || echo "Unknown")
             
-            if [[ "$DRY_RUN" == "true" ]]; then
-                log "INFO" "[DRY RUN] Would remove user from group: $group_name ($group_id)"
-            else
-                if az entra group member remove --group "$group_id" --member-id "$user_id" &>/dev/null; then
-                    log "INFO" "Removed user from group: $group_name"
-                    ((group_count++))
+            # Check if we should filter by specific groups
+            local should_remove=true
+            if [[ ${#SPECIFIC_GROUPS[@]} -gt 0 ]]; then
+                should_remove=false
+                for specific_group in "${SPECIFIC_GROUPS[@]}"; do
+                    if [[ "$group_name" == "$specific_group" ]] || [[ "$group_id" == "$specific_group" ]]; then
+                        should_remove=true
+                        break
+                    fi
+                done
+            fi
+            
+            if [[ "$should_remove" == "true" ]]; then
+                ((group_count++))
+                if [[ "$DRY_RUN" == "true" ]]; then
+                    log "INFO" "[DRY RUN] Would remove user from group: $group_name ($group_id)"
                 else
-                    log "ERROR" "Failed to remove user from group: $group_name"
+                    if az ad group member remove --group "$group_id" --member-id "$user_id" &>/dev/null; then
+                        log "INFO" "Removed user from group: $group_name"
+                        ((removed_count++))
+                    else
+                        log "ERROR" "Failed to remove user from group: $group_name"
+                    fi
                 fi
+            else
+                log "INFO" "Skipping group (not in filter list): $group_name ($group_id)"
             fi
         fi
-    done <<< "$groups"
+    done <<< "$user_groups"
     
     if [[ "$DRY_RUN" != "true" ]]; then
-        print_operation_status "Microsoft Entra ID Group Removal" "success" "Removed user from $group_count groups"
+        if [[ ${#SPECIFIC_GROUPS[@]} -gt 0 ]]; then
+            print_operation_status "Microsoft Entra ID Group Removal" "success" "Removed user from $removed_count of $group_count filtered groups"
+        else
+            print_operation_status "Microsoft Entra ID Group Removal" "success" "Removed user from $removed_count groups"
+        fi
     else
-        print_operation_status "Microsoft Entra ID Group Removal" "success" "[DRY RUN] Would remove user from groups"
+        if [[ ${#SPECIFIC_GROUPS[@]} -gt 0 ]]; then
+            print_operation_status "Microsoft Entra ID Group Removal" "success" "[DRY RUN] Would remove user from $group_count filtered groups"
+        else
+            print_operation_status "Microsoft Entra ID Group Removal" "success" "[DRY RUN] Would remove user from groups"
+        fi
     fi
 }
 
@@ -490,40 +536,85 @@ revoke_rbac_roles() {
     print_operation_status "RBAC Role Revocation" "start" "Scanning user's role assignments"
     log "INFO" "Revoking RBAC role assignments..."
     
-    local role_assignments=$(az role assignment list --assignee "$USER_PRINCIPAL_NAME" --all --output json 2>/dev/null || echo "[]")
+    # Build Azure CLI query based on resource group filter
+    local assignment_query="az role assignment list --assignee \"$USER_PRINCIPAL_NAME\""
+    if [[ -n "$RESOURCE_GROUP" ]]; then
+        assignment_query="$assignment_query --resource-group \"$RESOURCE_GROUP\""
+        log "INFO" "Filtering role assignments to resource group: $RESOURCE_GROUP"
+    else
+        assignment_query="$assignment_query --all"
+        log "INFO" "Scanning role assignments across all scopes"
+    fi
+    assignment_query="$assignment_query --output json"
+    
+    local role_assignments=$(eval "$assignment_query" 2>/dev/null || echo "[]")
     local role_count=$(echo "$role_assignments" | jq '. | length' 2>/dev/null || echo "0")
     
     if [[ "$role_count" -eq 0 ]]; then
-        print_operation_status "RBAC Role Revocation" "skip" "User has no RBAC role assignments"
+        local scope_msg="all scopes"
+        [[ -n "$RESOURCE_GROUP" ]] && scope_msg="resource group '$RESOURCE_GROUP'"
+        print_operation_status "RBAC Role Revocation" "skip" "User has no RBAC role assignments in $scope_msg"
         return 0
     fi
     
     echo -e "   ${BLUE}Found $role_count role assignments to process${NC}"
     
+    # Filter by specific roles if provided
+    if [[ ${#SPECIFIC_ROLES[@]} -gt 0 ]]; then
+        log "INFO" "Filtering to specific roles: ${SPECIFIC_ROLES[*]}"
+        echo -e "   ${BLUE}Filtering to specific roles: ${SPECIFIC_ROLES[*]}${NC}"
+    fi
+    
     local revoked_count=0
+    local filtered_count=0
     while IFS= read -r assignment; do
         if [[ -n "$assignment" ]]; then
             local assignment_id=$(echo "$assignment" | jq -r '.id')
             local role_name=$(echo "$assignment" | jq -r '.roleDefinitionName')
             local scope=$(echo "$assignment" | jq -r '.scope')
             
-            if [[ "$DRY_RUN" == "true" ]]; then
-                log "INFO" "[DRY RUN] Would revoke role: $role_name at scope: $scope"
-            else
-                if az role assignment delete --ids "$assignment_id" &>/dev/null; then
-                    log "INFO" "Revoked role: $role_name at scope: $scope"
-                    ((revoked_count++))
+            # Check if we should filter by specific roles
+            local should_revoke=true
+            if [[ ${#SPECIFIC_ROLES[@]} -gt 0 ]]; then
+                should_revoke=false
+                for specific_role in "${SPECIFIC_ROLES[@]}"; do
+                    if [[ "$role_name" == "$specific_role" ]]; then
+                        should_revoke=true
+                        break
+                    fi
+                done
+            fi
+            
+            if [[ "$should_revoke" == "true" ]]; then
+                ((filtered_count++))
+                if [[ "$DRY_RUN" == "true" ]]; then
+                    log "INFO" "[DRY RUN] Would revoke role: $role_name at scope: $scope"
                 else
-                    log "ERROR" "Failed to revoke role: $role_name at scope: $scope"
+                    if az role assignment delete --ids "$assignment_id" &>/dev/null; then
+                        log "INFO" "Revoked role: $role_name at scope: $scope"
+                        ((revoked_count++))
+                    else
+                        log "ERROR" "Failed to revoke role: $role_name at scope: $scope"
+                    fi
                 fi
+            else
+                log "INFO" "Skipping role (not in filter list): $role_name at scope: $scope"
             fi
         fi
     done < <(echo "$role_assignments" | jq -c '.[]')
     
     if [[ "$DRY_RUN" != "true" ]]; then
-        print_operation_status "RBAC Role Revocation" "success" "Revoked $revoked_count of $role_count role assignments"
+        if [[ ${#SPECIFIC_ROLES[@]} -gt 0 ]]; then
+            print_operation_status "RBAC Role Revocation" "success" "Revoked $revoked_count of $filtered_count filtered role assignments"
+        else
+            print_operation_status "RBAC Role Revocation" "success" "Revoked $revoked_count of $role_count role assignments"
+        fi
     else
-        print_operation_status "RBAC Role Revocation" "success" "[DRY RUN] Would revoke $role_count role assignments"
+        if [[ ${#SPECIFIC_ROLES[@]} -gt 0 ]]; then
+            print_operation_status "RBAC Role Revocation" "success" "[DRY RUN] Would revoke $filtered_count filtered role assignments"
+        else
+            print_operation_status "RBAC Role Revocation" "success" "[DRY RUN] Would revoke $role_count role assignments"
+        fi
     fi
 }
 
@@ -913,6 +1004,22 @@ while [[ $# -gt 0 ]]; do
         -s|--subscription)
             SUBSCRIPTION_ID="$2"
             shift 2
+            ;;
+        -r|--resource-group)
+            RESOURCE_GROUP="$2"
+            shift 2
+            ;;
+        -R|--roles)
+            IFS=',' read -ra SPECIFIC_ROLES <<< "$2"
+            shift 2
+            ;;
+        -G|--groups)
+            IFS=',' read -ra SPECIFIC_GROUPS <<< "$2"
+            shift 2
+            ;;
+        --entra-operations)
+            ENTRA_OPERATIONS=true
+            shift
             ;;
         --no-disable-user)
             DISABLE_USER=false
