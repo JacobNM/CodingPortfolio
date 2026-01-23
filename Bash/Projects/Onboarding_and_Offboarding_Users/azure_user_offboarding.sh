@@ -16,7 +16,9 @@ set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/offboarding_$(date +%Y%m%d_%H%M%S).log"
 # Azure subscription roles (Owner role provides all these)
-REQUIRED_AZURE_ROLES=("User Access Administrator" "Virtual Machine Contributor")
+REQUIRED_AZURE_ROLES=("User Access Administrator" "Contributor")
+# Alternative roles that provide equivalent permissions
+EQUIVALENT_ROLES=("Owner" "Co-Administrator")
 # Entra ID roles (only needed if --entra-operations is enabled)
 REQUIRED_ENTRA_ROLES=("User Administrator" "Groups Administrator")
 
@@ -186,6 +188,95 @@ check_prerequisites() {
     log "INFO" "Prerequisites check completed successfully"
 }
 
+# Get user's group memberships
+get_user_groups() {
+    local user_id=$(az ad signed-in-user show --query "id" -o tsv)
+    if [[ -n "$user_id" ]]; then
+        # Get group memberships using the user's object ID, extract only the GUID portion
+        local user_groups=$(az ad user get-member-groups --id "$user_id" --query "[]" -o tsv 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+        echo "$user_groups"
+    fi
+}
+
+# Check if user has a role through group membership at given scope
+check_group_roles_at_scope() {
+    local scope_param="$1"  # --subscription or --resource-group
+    local scope_value="$2"  # subscription id or rg name
+    local role_name="$3"
+    local groups="$4"
+    
+    if [[ -z "$groups" ]]; then
+        return 1
+    fi
+    
+    # Check each group for the specific role
+    while IFS= read -r group_id; do
+        if [[ -n "$group_id" ]] && [[ "$group_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            # Use group ID directly (without group name lookup to avoid parsing issues)
+            local has_role=$(az role assignment list --assignee "$group_id" $scope_param "$scope_value" \
+                            --query "[?roleDefinitionName=='$role_name']" -o tsv 2>/dev/null)
+            
+            if [[ -n "$has_role" ]]; then
+                # Try to get group display name for better logging (but don't fail if it doesn't work)
+                local group_name=$(az ad group show --group "$group_id" --query "displayName" -o tsv 2>/dev/null || echo "$group_id")
+                log "INFO" "✓ Found role '$role_name' through group membership: $group_name"
+                return 0
+            fi
+            
+            # Check for equivalent roles
+            for equiv_role in "${EQUIVALENT_ROLES[@]}"; do
+                local has_equiv=$(az role assignment list --assignee "$group_id" $scope_param "$scope_value" \
+                                 --query "[?roleDefinitionName=='$equiv_role']" -o tsv 2>/dev/null)
+                if [[ -n "$has_equiv" ]]; then
+                    local group_name=$(az ad group show --group "$group_id" --query "displayName" -o tsv 2>/dev/null || echo "$group_id")
+                    log "INFO" "✓ Found equivalent role '$equiv_role' through group membership: $group_name (provides '$role_name' permissions)"
+                    return 0
+                fi
+            done
+        fi
+    done <<< "$groups"
+    
+    return 1  # Role not found through groups
+}
+
+# Check if user has a role or equivalent role at given scope (direct assignment or through groups)
+check_role_at_scope() {
+    local user="$1"
+    local scope_param="$2"  # --subscription or --resource-group
+    local scope_value="$3"  # subscription id or rg name
+    local role_name="$4"
+    
+    # First check direct assignment
+    local has_role=$(az role assignment list --assignee "$user" $scope_param "$scope_value" \
+                    --query "[?roleDefinitionName=='$role_name']" -o tsv)
+    
+    if [[ -n "$has_role" ]]; then
+        log "INFO" "✓ Found direct assignment of role: $role_name"
+        return 0  # Found the role
+    fi
+    
+    # Check for equivalent roles (direct assignment)
+    for equiv_role in "${EQUIVALENT_ROLES[@]}"; do
+        local has_equiv=$(az role assignment list --assignee "$user" $scope_param "$scope_value" \
+                         --query "[?roleDefinitionName=='$equiv_role']" -o tsv)
+        if [[ -n "$has_equiv" ]]; then
+            log "INFO" "✓ Found direct assignment of equivalent role '$equiv_role' (provides '$role_name' permissions)"
+            return 0  # Found equivalent role
+        fi
+    done
+    
+    # If not found through direct assignment, check group memberships
+    local user_groups=$(get_user_groups)
+    if [[ -n "$user_groups" ]]; then
+        log "INFO" "Checking group memberships for role: $role_name"
+        if check_group_roles_at_scope "$scope_param" "$scope_value" "$role_name" "$user_groups"; then
+            return 0  # Found through group membership
+        fi
+    fi
+    
+    return 1  # Role not found
+}
+
 # Verify user has required permissions
 check_permissions() {
     log "INFO" "Checking user permissions..."
@@ -193,23 +284,29 @@ check_permissions() {
     local current_user=$(az account show --query user.name -o tsv)
     log "INFO" "Current user: $current_user"
     
-    # Check Azure subscription roles (always required)
+    # Check Azure subscription roles first
     log "INFO" "Checking Azure subscription permissions..."
-    local has_owner=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \\
+    local has_owner=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \
                      --query "[?roleDefinitionName=='Owner']" -o tsv)
     if [[ -n "$has_owner" ]]; then
         log "INFO" "✓ Owner role confirmed - all Azure operations permitted"
-    else
-        log "INFO" "Checking individual Azure roles..."
-        for role in "${REQUIRED_AZURE_ROLES[@]}"; do
-            local has_role=$(az role assignment list --assignee "$current_user" --subscription "$SUBSCRIPTION_ID" \\
-                            --query "[?roleDefinitionName=='$role']" -o tsv)
-            if [[ -z "$has_role" ]]; then
-                log "WARN" "Missing Azure role: $role. Some operations may fail."
-            else
-                log "INFO" "✓ Confirmed Azure role: $role"
-            fi
-        done
+        return 0
+    fi
+    
+    log "INFO" "Checking individual Azure roles at subscription level..."
+    local subscription_roles_sufficient=true
+    for role in "${REQUIRED_AZURE_ROLES[@]}"; do
+        if check_role_at_scope "$current_user" "--subscription" "$SUBSCRIPTION_ID" "$role"; then
+            log "INFO" "✓ Confirmed subscription-level Azure role: $role"
+        else
+            subscription_roles_sufficient=false
+        fi
+    done
+    
+    if [[ "$subscription_roles_sufficient" == "false" ]]; then
+        log "WARN" "Could not find required roles at subscription level."
+        log "INFO" "Required for offboarding operations: User Access Administrator or Owner"
+        log "INFO" "The script will proceed - actual operations will succeed/fail based on your effective permissions."
     fi
     
     # Check Entra ID permissions only if required
@@ -252,15 +349,12 @@ validate_input() {
     
     log "INFO" "Input validation completed successfully"
 }
-    
-    log "INFO" "Input validation completed successfully"
-}
 
 # Check if user exists in Microsoft Entra ID
 check_user_exists() {
     log "INFO" "Checking if user exists in Microsoft Entra ID..."
     
-    local existing_user=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
+    local existing_user=$(az ad user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv 2>/dev/null || echo "")
     
     if [[ -n "$existing_user" ]]; then
         log "INFO" "User found in Microsoft Entra ID: $existing_user"
