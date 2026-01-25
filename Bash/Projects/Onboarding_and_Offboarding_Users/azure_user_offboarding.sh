@@ -5,9 +5,6 @@
 # Description: Automates the offboarding process for users from Azure resources
 #              Supports optional Microsoft Entra ID operations (requires additional permissions)
 #              Core functionality works with Azure subscription Owner role
-# Author: Your Organization
-# Version: 2.0
-# Last Modified: $(date)
 #################################################################################
 
 set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
