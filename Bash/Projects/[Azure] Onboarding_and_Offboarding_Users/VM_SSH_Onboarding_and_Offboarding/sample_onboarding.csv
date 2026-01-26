@@ -1,0 +1,4 @@
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,dry_run
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-vm-rg,"vm01,vm02",false
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-vm-rg,vm03,true
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...",dev-vm-rg,"vm04,vm05,vm06",false
