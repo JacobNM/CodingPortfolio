@@ -110,44 +110,44 @@ Usage: $0 [COMMAND_LINE_OPTIONS | -f <csv_file>]
 
 **COMMAND LINE MODE:**
 Required Parameters:
-    -u <username>           Username for identification
-    -s <subscription_id>    Azure subscription ID
-    -g <vm_resource_group>  Resource group containing VMs
-    -v <vm_name>           VM name (can be specified multiple times)
+    -u, --username <username>           Username for identification
+    -s, --subscription <subscription_id> Azure subscription ID
+    -g, --resource-group <vm_resource_group> Resource group containing VMs
+    -v, --vm <vm_name>                 VM name (can be specified multiple times)
 
 Optional Parameters:
-    -k <ssh_public_key>    Specific SSH public key to remove (file path or key content)
-    -a                     Remove ALL SSH keys from azroot account
-    -n                     No backup (skip backup of authorized_keys)
-    -d                     Dry run mode (show what would be done)
-    -h                     Display this help message
+    -k, --key <ssh_public_key>         Specific SSH public key to remove (file path or key content)
+    -a, --remove-all                   Remove ALL SSH keys from azroot account
+    -n, --no-backup                   No backup (skip backup of authorized_keys)
+    -d, --dry-run                      Dry run mode (show what would be done)
+    -h, --help                         Display this help message
 
 **CSV FILE MODE:**
-    -f <csv_file>          CSV file containing offboarding parameters
+    -f, --file <csv_file>              CSV file containing offboarding parameters
                            Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys,dry_run
                            VM names can be comma-separated within quotes
                            ssh_public_key can be empty if remove_all_keys is true
                            Boolean values should be 'true' or 'false'
 
 Examples:
-    # Command line mode - Remove specific SSH key from single VM
+    # Command line mode - Remove specific SSH key from single VM (short options)
     $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
        -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
 
-    # Command line mode - Remove ALL SSH keys from multiple VMs
-    $0 -u jane.smith -s "12345678-1234-1234-1234-123456789012" \\
-       -g "myvm-rg" -v "vm01" -v "vm02" -v "vm03" -a
+    # Command line mode - Remove ALL SSH keys from multiple VMs (long options)
+    $0 --username jane.smith --subscription "12345678-1234-1234-1234-123456789012" \\
+       --resource-group "myvm-rg" --vm "vm01" --vm "vm02" --vm "vm03" --remove-all
 
-    # Command line mode - Dry run mode
-    $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
-       -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" -d
+    # Command line mode - Dry run mode (mixed options)
+    $0 -u john.doe --subscription "12345678-1234-1234-1234-123456789012" \\
+       --key ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" --dry-run
 
-    # Command line mode - Remove specific key without backup
-    $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
-       -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" -n
+    # Command line mode - Remove specific key without backup (long options)
+    $0 --username john.doe --subscription "12345678-1234-1234-1234-123456789012" \\
+       --key ~/.ssh/id_rsa.pub --resource-group "myvm-rg" --vm "myvm01" --no-backup
 
     # CSV file mode - Batch processing
-    $0 -f offboarding_batch.csv
+    $0 --file offboarding_batch.csv --dry-run
 
 **CSV File Format Example (offboarding_batch.csv):**
 username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys,dry_run
@@ -679,39 +679,39 @@ main() {
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -u)
+            -u|--username)
                 USER_NAME="$2"
                 shift 2
                 ;;
-            -s)
+            -s|--subscription)
                 SUBSCRIPTION_ID="$2"
                 shift 2
                 ;;
-            -k)
+            -k|--key)
                 SSH_PUBLIC_KEY="$2"
                 shift 2
                 ;;
-            -g)
+            -g|--resource-group)
                 VM_RESOURCE_GROUP="$2"
                 shift 2
                 ;;
-            -v)
+            -v|--vm)
                 VM_NAMES+=("$2")
                 shift 2
                 ;;
-            -f)
+            -f|--file)
                 CSV_FILE="$2"
                 shift 2
                 ;;
-            -a)
+            -a|--remove-all)
                 REMOVE_ALL_KEYS=true
                 shift
                 ;;
-            -n)
+            -n|--no-backup)
                 BACKUP_KEYS=false
                 shift
                 ;;
-            -d)
+            -d|--dry-run)
                 DRY_RUN=true
                 shift
                 ;;
