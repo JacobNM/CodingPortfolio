@@ -24,10 +24,14 @@ Removes SSH public keys from the `azroot` account on specified Azure VMs.
 ### 2. CSV File Mode (New)
 ```bash
 # Onboarding
-./azure_vm_ssh_onboarding.sh -f sample_onboarding.csv
+./azure_vm_ssh_onboarding.sh --file sample_onboarding.csv
 
 # Offboarding
-./azure_vm_ssh_offboarding.sh -f sample_offboarding.csv
+./azure_vm_ssh_offboarding.sh --file sample_offboarding.csv
+
+# Both support dry run mode via command line flag
+./azure_vm_ssh_onboarding.sh --file sample_onboarding.csv --dry-run
+./azure_vm_ssh_offboarding.sh --file sample_offboarding.csv --dry-run
 ```
 
 ## CSV File Formats
@@ -43,7 +47,6 @@ The CSV file must have the following columns in this exact order:
 | ssh_public_key | SSH key file path or key content | Yes | ~/.ssh/id_rsa.pub |
 | vm_resource_group | Resource group containing VMs | Yes | prod-vm-rg |
 | vm_names | VM names (comma-separated for multiple) | Yes | "vm01,vm02" |
-| dry_run | Dry run mode (true/false) | Yes | false |
 
 ### SSH Offboarding CSV Format
 
@@ -58,7 +61,6 @@ The CSV file must have the following columns in this exact order:
 | vm_names | VM names (comma-separated for multiple) | Yes | "vm01,vm02" |
 | remove_all_keys | Remove all SSH keys (true/false) | Yes | false |
 | backup_keys | Backup authorized_keys before changes (true/false) | Yes | true |
-| dry_run | Dry run mode (true/false) | Yes | false |
 
 *SSH public key is required unless `remove_all_keys` is `true`
 
@@ -69,23 +71,24 @@ The CSV file must have the following columns in this exact order:
 - Empty rows are automatically skipped
 - First row must be the header
 - For offboarding: SSH key can be empty if `remove_all_keys` is `true`
+- **Dry run mode**: Controlled by command line flag (`--dry-run` or `-d`), not CSV content
 
 ### Example CSV Content:
 
 **Onboarding CSV (sample_onboarding.csv):**
 ```csv
-username,subscription_id,ssh_public_key,vm_resource_group,vm_names,dry_run
-john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false
-jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03,true
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQ...",dev-rg,"vm04,vm05,vm06",false
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02"
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQ...",dev-rg,"vm04,vm05,vm06"
 ```
 
 **Offboarding CSV (sample_offboarding.csv):**
 ```csv
-username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys,dry_run
-john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true,false
-jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false,true
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true,false
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true
+jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true
 ```
 
 ## Benefits of CSV Mode
