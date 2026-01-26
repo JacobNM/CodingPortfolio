@@ -379,22 +379,45 @@ validate_csv_file() {
     
     print_section "Validating CSV File"
     
+    # Expand tilde and resolve path
+    csv_file="${csv_file/#\~/$HOME}"
+    # Remove escaped characters and resolve the path
+    csv_file=$(eval echo "$csv_file")
+    
+    # Update the global variable with the resolved path
+    CSV_FILE="$csv_file"
+    
+    log "INFO" "Resolved CSV file path: $csv_file"
+    
     # Check if file exists
     if [[ ! -f "$csv_file" ]]; then
         log "ERROR" "CSV file does not exist: $csv_file"
+        log "INFO" "Make sure the file path is correct and the file exists"
         exit 1
     fi
     
     # Check if file is readable
     if [[ ! -r "$csv_file" ]]; then
         log "ERROR" "CSV file is not readable: $csv_file"
+        log "INFO" "Check file permissions"
         exit 1
     fi
     
     # Count lines (excluding header)
+    local total_lines=$(wc -l < "$csv_file")
     local line_count=$(tail -n +2 "$csv_file" | wc -l | xargs)
+    
+    log "INFO" "CSV file stats: Total lines=$total_lines, Data lines=$line_count"
+    
+    # Debug: Show first few lines of the file
+    log "INFO" "CSV file content preview:"
+    head -n 3 "$csv_file" | while IFS= read -r line; do
+        log "INFO" "  Line: '$line'"
+    done
+    
     if [[ $line_count -eq 0 ]]; then
         log "ERROR" "CSV file contains no data rows (only header or empty file)"
+        log "ERROR" "Total lines in file: $total_lines"
         exit 1
     fi
     
@@ -403,7 +426,7 @@ validate_csv_file() {
 
 # Parse CSV file and process each row
 process_csv_file() {
-    local csv_file="$1"
+    local csv_file="$CSV_FILE"  # Use the resolved path from validate_csv_file
     
     print_section "Processing CSV File: $csv_file"
     
@@ -612,8 +635,8 @@ main() {
         # Validate CSV file
         validate_csv_file "$CSV_FILE"
         
-        # Process CSV file
-        if process_csv_file "$CSV_FILE"; then
+        # Process CSV file (uses resolved path from CSV_FILE global variable)
+        if process_csv_file; then
             log "SUCCESS" "CSV file processing completed successfully"
             exit 0
         else
