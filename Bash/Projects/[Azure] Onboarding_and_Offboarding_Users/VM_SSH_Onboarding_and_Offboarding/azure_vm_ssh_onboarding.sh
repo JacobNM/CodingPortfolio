@@ -26,6 +26,7 @@ DRY_RUN=false
 VM_RESOURCE_GROUP=""
 VM_NAMES=()
 SSH_PUBLIC_KEY=""
+CSV_FILE=""
 
 #################################################################################
 # Functions
@@ -96,12 +97,14 @@ print_progress() {
 # Print usage information
 usage() {
     cat << EOF
-Usage: $0 -u <username> -s <subscription_id> -k <ssh_public_key> -g <vm_resource_group> -v <vm_name> [OPTIONS]
+Usage: $0 [COMMAND_LINE_OPTIONS | -f <csv_file>]
 
 **FUNCTIONALITY:**
 - Add SSH public keys to Azure VMs (azroot account)
 - Support for multiple VMs
+- Import parameters from CSV file for batch operations
 
+**COMMAND LINE MODE:**
 Required Parameters:
     -u <username>           Username for identification
     -s <subscription_id>    Azure subscription ID
@@ -113,18 +116,33 @@ Optional Parameters:
     -d                     Dry run mode (show what would be done)
     -h                     Display this help message
 
+**CSV FILE MODE:**
+    -f <csv_file>          CSV file containing onboarding parameters
+                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,dry_run
+                           VM names can be comma-separated within quotes
+                           dry_run should be 'true' or 'false'
+
 Examples:
-    # Add SSH key to single VM
+    # Command line mode - Add SSH key to single VM
     $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
        -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
 
-    # Add SSH key to multiple VMs
+    # Command line mode - Add SSH key to multiple VMs
     $0 -u jane.smith -s "12345678-1234-1234-1234-123456789012" \\
        -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "vm01" -v "vm02" -v "vm03"
 
-    # Dry run mode
+    # Command line mode - Dry run
     $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
        -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" -d
+
+    # CSV file mode - Batch processing
+    $0 -f onboarding_batch.csv
+
+**CSV File Format Example (onboarding_batch.csv):**
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,dry_run
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03,true
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05,vm06",false
 
 EOF
 }
@@ -355,6 +373,181 @@ EOF
     fi
 }
 
+# Validate CSV file format and content
+validate_csv_file() {
+    local csv_file="$1"
+    
+    print_section "Validating CSV File"
+    
+    # Check if file exists
+    if [[ ! -f "$csv_file" ]]; then
+        log "ERROR" "CSV file does not exist: $csv_file"
+        exit 1
+    fi
+    
+    # Check if file is readable
+    if [[ ! -r "$csv_file" ]]; then
+        log "ERROR" "CSV file is not readable: $csv_file"
+        exit 1
+    fi
+    
+    # Count lines (excluding header)
+    local line_count=$(tail -n +2 "$csv_file" | wc -l | xargs)
+    if [[ $line_count -eq 0 ]]; then
+        log "ERROR" "CSV file contains no data rows (only header or empty file)"
+        exit 1
+    fi
+    
+    log "SUCCESS" "CSV file validation completed - found $line_count data rows"
+}
+
+# Parse CSV file and process each row
+process_csv_file() {
+    local csv_file="$1"
+    
+    print_section "Processing CSV File: $csv_file"
+    
+    local line_number=1
+    local processed_rows=0
+    local failed_rows=0
+    
+    # Read CSV file line by line, skipping the header
+    while IFS=',' read -r csv_username csv_subscription csv_ssh_key csv_resource_group csv_vm_names csv_dry_run || [[ -n "$csv_username" ]]; do
+        # Skip header row
+        if [[ $line_number -eq 1 ]]; then
+            line_number=$((line_number + 1))
+            continue
+        fi
+        
+        # Skip empty lines
+        if [[ -z "$csv_username" && -z "$csv_subscription" && -z "$csv_ssh_key" ]]; then
+            line_number=$((line_number + 1))
+            continue
+        fi
+        
+        log "INFO" "Processing CSV row $line_number: user=$csv_username, subscription=$csv_subscription, rg=$csv_resource_group"
+        
+        # Clean up CSV fields (remove quotes and trim whitespace)
+        csv_username=$(echo "$csv_username" | sed 's/^"//;s/"$//' | xargs)
+        csv_subscription=$(echo "$csv_subscription" | sed 's/^"//;s/"$//' | xargs)
+        csv_ssh_key=$(echo "$csv_ssh_key" | sed 's/^"//;s/"$//' | xargs)
+        csv_resource_group=$(echo "$csv_resource_group" | sed 's/^"//;s/"$//' | xargs)
+        csv_vm_names=$(echo "$csv_vm_names" | sed 's/^"//;s/"$//' | xargs)
+        csv_dry_run=$(echo "$csv_dry_run" | sed 's/^"//;s/"$//' | xargs)
+        
+        # Set variables for current row
+        USER_NAME="$csv_username"
+        SUBSCRIPTION_ID="$csv_subscription"
+        SSH_PUBLIC_KEY="$csv_ssh_key"
+        VM_RESOURCE_GROUP="$csv_resource_group"
+        
+        # Parse VM names (handle comma-separated values)
+        IFS=',' read -ra VM_NAMES <<< "$csv_vm_names"
+        # Trim whitespace from each VM name
+        for i in "${!VM_NAMES[@]}"; do
+            VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
+        done
+        
+        # Set dry run mode
+        if [[ "$csv_dry_run" =~ ^[Tt][Rr][Uu][Ee]$ ]]; then
+            DRY_RUN=true
+        else
+            DRY_RUN=false
+        fi
+        
+        # Process current row
+        if process_single_operation; then
+            processed_rows=$((processed_rows + 1))
+            log "SUCCESS" "Completed processing row $line_number for user: $USER_NAME"
+        else
+            failed_rows=$((failed_rows + 1))
+            log "ERROR" "Failed processing row $line_number for user: $USER_NAME"
+        fi
+        
+        line_number=$((line_number + 1))
+        echo # Add separator between operations
+    done < "$csv_file"
+    
+    # Generate CSV processing summary
+    print_section "CSV Processing Summary"
+    echo -e "${BLUE}Total rows processed:${NC} $((processed_rows + failed_rows))"
+    echo -e "${GREEN}Successful operations:${NC} $processed_rows"
+    echo -e "${RED}Failed operations:${NC} $failed_rows"
+    
+    if [[ $failed_rows -gt 0 ]]; then
+        log "WARNING" "Some operations failed. Check the log file for details: $LOG_FILE"
+        return 1
+    else
+        log "SUCCESS" "All CSV operations completed successfully"
+        return 0
+    fi
+}
+
+# Process a single onboarding operation (used by CSV processing)
+process_single_operation() {
+    local operation_failed=false
+    
+    # Validate input for current operation
+    if ! validate_input_for_row; then
+        return 1
+    fi
+    
+    # Validate SSH key for current operation
+    if ! validate_ssh_key "$SSH_PUBLIC_KEY"; then
+        return 1
+    fi
+    
+    # Check VM permissions for current operation
+    if ! check_vm_permissions "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP"; then
+        return 1
+    fi
+    
+    # Manage SSH access on VMs for current operation
+    current_vm=0
+    if ! manage_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]}"; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Validate input for a single CSV row
+validate_input_for_row() {
+    local validation_failed=false
+    
+    # Check required parameters
+    if [[ -z "$USER_NAME" ]]; then
+        log "ERROR" "Username is required (CSV column: username)"
+        validation_failed=true
+    fi
+    
+    if [[ -z "$SUBSCRIPTION_ID" ]]; then
+        log "ERROR" "Subscription ID is required (CSV column: subscription_id)"
+        validation_failed=true
+    fi
+    
+    if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+        log "ERROR" "SSH public key is required (CSV column: ssh_public_key)"
+        validation_failed=true
+    fi
+    
+    if [[ -z "$VM_RESOURCE_GROUP" ]]; then
+        log "ERROR" "VM resource group is required (CSV column: vm_resource_group)"
+        validation_failed=true
+    fi
+    
+    if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
+        log "ERROR" "At least one VM name is required (CSV column: vm_names)"
+        validation_failed=true
+    fi
+    
+    if [[ "$validation_failed" == "true" ]]; then
+        return 1
+    fi
+    
+    return 0
+}
+
 #################################################################################
 # Main Script
 #################################################################################
@@ -383,6 +576,10 @@ main() {
                 VM_NAMES+=("$2")
                 shift 2
                 ;;
+            -f)
+                CSV_FILE="$2"
+                shift 2
+                ;;
             -d)
                 DRY_RUN=true
                 shift
@@ -403,24 +600,47 @@ main() {
     echo "SSH Key Onboarding Log - $(date)" > "$LOG_FILE"
     log "INFO" "Starting SSH key onboarding script"
     
-    # Validate input
-    validate_input
-    
-    # Validate SSH key
-    validate_ssh_key "$SSH_PUBLIC_KEY"
-    
-    # Check prerequisites
+    # Check prerequisites first
     check_prerequisites
     
-    # Check VM permissions
-    check_vm_permissions "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP"
-    
-    # Manage SSH access on VMs
-    current_vm=0
-    manage_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]}"
-    
-    # Generate summary
-    generate_summary
+    # Determine mode: CSV file or command line parameters
+    if [[ -n "$CSV_FILE" ]]; then
+        # CSV File Mode
+        print_section "CSV File Mode"
+        log "INFO" "Processing SSH key onboarding from CSV file: $CSV_FILE"
+        
+        # Validate CSV file
+        validate_csv_file "$CSV_FILE"
+        
+        # Process CSV file
+        if process_csv_file "$CSV_FILE"; then
+            log "SUCCESS" "CSV file processing completed successfully"
+            exit 0
+        else
+            log "ERROR" "CSV file processing completed with errors"
+            exit 1
+        fi
+    else
+        # Command Line Mode
+        print_section "Command Line Mode"
+        log "INFO" "Processing SSH key onboarding from command line parameters"
+        
+        # Validate input
+        validate_input
+        
+        # Validate SSH key
+        validate_ssh_key "$SSH_PUBLIC_KEY"
+        
+        # Check VM permissions
+        check_vm_permissions "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP"
+        
+        # Manage SSH access on VMs
+        current_vm=0
+        manage_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]}"
+        
+        # Generate summary
+        generate_summary
+    fi
 }
 
 # Run main function with all arguments
