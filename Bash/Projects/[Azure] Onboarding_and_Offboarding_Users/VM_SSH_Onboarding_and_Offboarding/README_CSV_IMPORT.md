@@ -1,21 +1,38 @@
-# Azure VM SSH Key Onboarding Script - CSV Import Feature
+# Azure VM SSH Key Management Scripts - CSV Import Feature
 
-This script now supports importing parameters from a CSV file for batch processing of SSH key onboarding operations.
+Both the onboarding and offboarding scripts now support importing parameters from CSV files for batch processing operations.
+
+## Scripts with CSV Support
+
+### 🔑 SSH Onboarding Script (`azure_vm_ssh_onboarding.sh`)
+Adds SSH public keys to the `azroot` account on specified Azure VMs.
+
+### 🗑️ SSH Offboarding Script (`azure_vm_ssh_offboarding.sh`)  
+Removes SSH public keys from the `azroot` account on specified Azure VMs.
 
 ## Usage Modes
 
 ### 1. Command Line Mode (Original)
 ```bash
-./azure_vm_ssh_onboarding.sh -u john.doe -s "12345678-1234-1234-1234-123456789012" \
-    -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" -v "myvm02"
+# Onboarding
+./azure_vm_ssh_onboarding.sh -u john.doe -s "12345..." -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
+
+# Offboarding  
+./azure_vm_ssh_offboarding.sh -u john.doe -s "12345..." -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
 ```
 
 ### 2. CSV File Mode (New)
 ```bash
+# Onboarding
 ./azure_vm_ssh_onboarding.sh -f sample_onboarding.csv
+
+# Offboarding
+./azure_vm_ssh_offboarding.sh -f sample_offboarding.csv
 ```
 
-## CSV File Format
+## CSV File Formats
+
+### SSH Onboarding CSV Format
 
 The CSV file must have the following columns in this exact order:
 
@@ -28,19 +45,47 @@ The CSV file must have the following columns in this exact order:
 | vm_names | VM names (comma-separated for multiple) | Yes | "vm01,vm02" |
 | dry_run | Dry run mode (true/false) | Yes | false |
 
+### SSH Offboarding CSV Format
+
+The CSV file must have the following columns in this exact order:
+
+| Column | Description | Required | Example |
+|--------|-------------|----------|---------|
+| username | User identifier | Yes | john.doe |
+| subscription_id | Azure subscription ID | Yes | 12345678-1234-1234-1234-123456789012 |
+| ssh_public_key | SSH key file path or key content | No* | ~/.ssh/id_rsa.pub |
+| vm_resource_group | Resource group containing VMs | Yes | prod-vm-rg |
+| vm_names | VM names (comma-separated for multiple) | Yes | "vm01,vm02" |
+| remove_all_keys | Remove all SSH keys (true/false) | Yes | false |
+| backup_keys | Backup authorized_keys before changes (true/false) | Yes | true |
+| dry_run | Dry run mode (true/false) | Yes | false |
+
+*SSH public key is required unless `remove_all_keys` is `true`
+
 ### CSV Format Notes:
 - Use quotes around values containing commas (e.g., VM names: "vm01,vm02")
 - SSH public key can be either a file path or the actual key content
-- dry_run values: "true", "false", "True", "False" (case insensitive)
+- Boolean values: "true", "false", "True", "False" (case insensitive)
 - Empty rows are automatically skipped
 - First row must be the header
+- For offboarding: SSH key can be empty if `remove_all_keys` is `true`
 
 ### Example CSV Content:
+
+**Onboarding CSV (sample_onboarding.csv):**
 ```csv
 username,subscription_id,ssh_public_key,vm_resource_group,vm_names,dry_run
-john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-vm-rg,"vm01,vm02",false
-jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-vm-rg,vm03,true
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQ...",dev-vm-rg,"vm04,vm05,vm06",false
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03,true
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQ...",dev-rg,"vm04,vm05,vm06",false
+```
+
+**Offboarding CSV (sample_offboarding.csv):**
+```csv
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys,dry_run
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true,false
+jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false,true
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true,false
 ```
 
 ## Benefits of CSV Mode
@@ -72,6 +117,23 @@ mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3NzaC1yc2EAAAADAQ
 ## Log Files
 
 Log files are automatically generated with timestamps:
-- Format: `ssh_onboarding_YYYYMMDD_HHMMSS.log`
+- Onboarding: `ssh_onboarding_YYYYMMDD_HHMMSS.log`
+- Offboarding: `ssh_offboarding_YYYYMMDD_HHMMSS.log`
 - Contains all operations, validations, and error details
 - Useful for troubleshooting and audit purposes
+
+## Key Differences Between Onboarding and Offboarding
+
+### Onboarding CSV Features:
+- Simpler format with 6 columns
+- Always requires SSH public key
+- Focuses on adding access
+
+### Offboarding CSV Features:
+- Extended format with 8 columns
+- Optional SSH public key (when removing all keys)
+- `remove_all_keys` option for complete key removal
+- `backup_keys` option for safety
+- More granular control over removal operations
+
+Both scripts share the same core benefits: batch processing, error recovery, detailed logging, and comprehensive validation.
