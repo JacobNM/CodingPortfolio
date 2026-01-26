@@ -1,6 +1,6 @@
 # Azure VM SSH Key Management Scripts
 
-This repository contains two Bash scripts designed to automate the management of SSH keys on Azure Virtual Machines. These scripts focus specifically on adding and removing SSH public keys from the `azroot` account on Azure VMs.
+This repository contains two Bash scripts designed to automate the management of SSH keys on Azure Virtual Machines. These scripts focus specifically on adding and removing SSH public keys from the `azroot` account on Azure VMs, supporting both individual command-line operations and batch processing via CSV files.
 
 ## Scripts Overview
 
@@ -20,8 +20,15 @@ Before using these scripts, ensure you have:
 4. **SSH public key** - A valid SSH public key for onboarding operations
 5. **Bash environment** - The scripts require Bash shell
 
-#### Option B: Enhanced with Entra ID Permissions
-For full functionality including user/group management, add:
+## Usage Modes
+
+Both scripts support two operation modes:
+
+### 1. Command Line Mode
+Direct parameter specification for single or multiple operations.
+
+### 2. CSV File Mode  
+Batch processing using CSV files containing multiple operations.
 
 ## 🔑 SSH Onboarding Script Usage
 
