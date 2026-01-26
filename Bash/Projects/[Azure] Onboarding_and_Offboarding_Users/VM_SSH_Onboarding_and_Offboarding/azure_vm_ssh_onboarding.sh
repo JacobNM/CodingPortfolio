@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 # Default values
 SUBSCRIPTION_ID=""
 USER_NAME=""
-DRY_RUN=false
+DRY_RUN=false  # Controlled by command line only (-d flag), NOT from CSV file
 VM_RESOURCE_GROUP=""
 VM_NAMES=()
 SSH_PUBLIC_KEY=""
@@ -106,43 +106,42 @@ Usage: $0 [COMMAND_LINE_OPTIONS | -f <csv_file>]
 
 **COMMAND LINE MODE:**
 Required Parameters:
-    -u <username>           Username for identification
-    -s <subscription_id>    Azure subscription ID
-    -k <ssh_public_key>     SSH public key file path or key content
-    -g <vm_resource_group>  Resource group containing VMs
-    -v <vm_name>           VM name (can be specified multiple times)
+    -u, --username <username>           Username for identification
+    -s, --subscription <subscription_id> Azure subscription ID
+    -k, --key <ssh_public_key>         SSH public key file path or key content
+    -g, --resource-group <vm_resource_group> Resource group containing VMs
+    -v, --vm <vm_name>                 VM name (can be specified multiple times)
 
 Optional Parameters:
-    -d                     Dry run mode (show what would be done)
-    -h                     Display this help message
+    -d, --dry-run                      Dry run mode (show what would be done)
+    -h, --help                         Display this help message
 
 **CSV FILE MODE:**
-    -f <csv_file>          CSV file containing onboarding parameters
-                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,dry_run
+    -f, --file <csv_file>              CSV file containing onboarding parameters
+                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names
                            VM names can be comma-separated within quotes
-                           dry_run should be 'true' or 'false'
 
 Examples:
-    # Command line mode - Add SSH key to single VM
+    # Command line mode - Add SSH key to single VM (short options)
     $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
        -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
 
-    # Command line mode - Add SSH key to multiple VMs
-    $0 -u jane.smith -s "12345678-1234-1234-1234-123456789012" \\
-       -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "vm01" -v "vm02" -v "vm03"
+    # Command line mode - Add SSH key to multiple VMs (long options)
+    $0 --username jane.smith --subscription "12345678-1234-1234-1234-123456789012" \\
+       --key ~/.ssh/id_rsa.pub --resource-group "myvm-rg" --vm "vm01" --vm "vm02" --vm "vm03"
 
-    # Command line mode - Dry run
-    $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
-       -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" -d
+    # Command line mode - Dry run (mixed options)
+    $0 -u john.doe --subscription "12345678-1234-1234-1234-123456789012" \\
+       --key ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" --dry-run
 
     # CSV file mode - Batch processing
-    $0 -f onboarding_batch.csv
+    $0 --file onboarding_batch.csv --dry-run
 
 **CSV File Format Example (onboarding_batch.csv):**
-username,subscription_id,ssh_public_key,vm_resource_group,vm_names,dry_run
-john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false
-jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03,true
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05,vm06",false
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02"
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05,vm06"
 
 EOF
 }
@@ -435,7 +434,7 @@ process_csv_file() {
     local failed_rows=0
     
     # Read CSV file line by line, skipping the header
-    while IFS=',' read -r csv_username csv_subscription csv_ssh_key csv_resource_group csv_vm_names csv_dry_run || [[ -n "$csv_username" ]]; do
+    while IFS=',' read -r csv_username csv_subscription csv_ssh_key csv_resource_group csv_vm_names || [[ -n "$csv_username" ]]; do
         # Skip header row
         if [[ $line_number -eq 1 ]]; then
             line_number=$((line_number + 1))
@@ -456,7 +455,6 @@ process_csv_file() {
         csv_ssh_key=$(echo "$csv_ssh_key" | sed 's/^"//;s/"$//' | xargs)
         csv_resource_group=$(echo "$csv_resource_group" | sed 's/^"//;s/"$//' | xargs)
         csv_vm_names=$(echo "$csv_vm_names" | sed 's/^"//;s/"$//' | xargs)
-        csv_dry_run=$(echo "$csv_dry_run" | sed 's/^"//;s/"$//' | xargs)
         
         # Set variables for current row
         USER_NAME="$csv_username"
@@ -471,12 +469,7 @@ process_csv_file() {
             VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
         done
         
-        # Set dry run mode
-        if [[ "$csv_dry_run" =~ ^[Tt][Rr][Uu][Ee]$ ]]; then
-            DRY_RUN=true
-        else
-            DRY_RUN=false
-        fi
+        # Note: DRY_RUN is controlled by command line flag, not CSV
         
         # Process current row
         if process_single_operation; then
@@ -579,31 +572,31 @@ main() {
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -u)
+            -u|--username)
                 USER_NAME="$2"
                 shift 2
                 ;;
-            -s)
+            -s|--subscription)
                 SUBSCRIPTION_ID="$2"
                 shift 2
                 ;;
-            -k)
+            -k|--key)
                 SSH_PUBLIC_KEY="$2"
                 shift 2
                 ;;
-            -g)
+            -g|--resource-group)
                 VM_RESOURCE_GROUP="$2"
                 shift 2
                 ;;
-            -v)
+            -v|--vm)
                 VM_NAMES+=("$2")
                 shift 2
                 ;;
-            -f)
+            -f|--file)
                 CSV_FILE="$2"
                 shift 2
                 ;;
-            -d)
+            -d|--dry-run)
                 DRY_RUN=true
                 shift
                 ;;
