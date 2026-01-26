@@ -408,12 +408,6 @@ validate_csv_file() {
     
     log "INFO" "CSV file stats: Total lines=$total_lines, Data lines=$line_count"
     
-    # Debug: Show first few lines of the file
-    log "INFO" "CSV file content preview:"
-    head -n 3 "$csv_file" | while IFS= read -r line; do
-        log "INFO" "  Line: '$line'"
-    done
-    
     if [[ $line_count -eq 0 ]]; then
         log "ERROR" "CSV file contains no data rows (only header or empty file)"
         log "ERROR" "Total lines in file: $total_lines"
@@ -428,6 +422,9 @@ process_csv_file() {
     local csv_file="$CSV_FILE"  # Use the resolved path from validate_csv_file
     
     print_section "Processing CSV File: $csv_file"
+    
+    # Count lines (excluding header) for progress tracking
+    local line_count=$(tail -n +2 "$csv_file" | wc -l | xargs)
     
     local line_number=1
     local processed_rows=0
@@ -447,7 +444,7 @@ process_csv_file() {
             continue
         fi
         
-        log "INFO" "Processing CSV row $line_number: user=$csv_username, subscription=$csv_subscription, rg=$csv_resource_group"
+        print_progress "$((line_number-1))" "$line_count" "Processing user: $csv_username"
         
         # Clean up CSV fields (remove quotes and trim whitespace)
         csv_username=$(echo "$csv_username" | sed 's/^"//;s/"$//' | xargs)
@@ -474,10 +471,10 @@ process_csv_file() {
         # Process current row
         if process_single_operation; then
             processed_rows=$((processed_rows + 1))
-            log "SUCCESS" "Completed processing row $line_number for user: $USER_NAME"
+            print_operation_status "User: $USER_NAME" "success"
         else
             failed_rows=$((failed_rows + 1))
-            log "ERROR" "Failed processing row $line_number for user: $USER_NAME"
+            print_operation_status "User: $USER_NAME" "error"
         fi
         
         line_number=$((line_number + 1))
