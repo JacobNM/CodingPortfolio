@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 # Default values
 SUBSCRIPTION_ID=""
 USER_NAME=""
-DRY_RUN=false
+DRY_RUN=false  # Controlled by command line only (-d flag), NOT from CSV file
 VM_RESOURCE_GROUP=""
 VM_NAMES=()
 SSH_PUBLIC_KEY=""
@@ -124,7 +124,7 @@ Optional Parameters:
 
 **CSV FILE MODE:**
     -f, --file <csv_file>              CSV file containing offboarding parameters
-                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys,dry_run
+                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys
                            VM names can be comma-separated within quotes
                            ssh_public_key can be empty if remove_all_keys is true
                            Boolean values should be 'true' or 'false'
@@ -150,10 +150,10 @@ Examples:
     $0 --file offboarding_batch.csv --dry-run
 
 **CSV File Format Example (offboarding_batch.csv):**
-username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys,dry_run
-john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true,false
-jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false,true
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true,false
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true
+jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true
 
 EOF
 }
@@ -516,7 +516,7 @@ process_csv_file() {
     local failed_rows=0
     
     # Read CSV file line by line, skipping the header
-    while IFS=',' read -r csv_username csv_subscription csv_ssh_key csv_resource_group csv_vm_names csv_remove_all csv_backup csv_dry_run || [[ -n "$csv_username" ]]; do
+    while IFS=',' read -r csv_username csv_subscription csv_ssh_key csv_resource_group csv_vm_names csv_remove_all csv_backup || [[ -n "$csv_username" ]]; do
         # Skip header row
         if [[ $line_number -eq 1 ]]; then
             line_number=$((line_number + 1))
@@ -539,7 +539,6 @@ process_csv_file() {
         csv_vm_names=$(echo "$csv_vm_names" | sed 's/^"//;s/"$//' | xargs)
         csv_remove_all=$(echo "$csv_remove_all" | sed 's/^"//;s/"$//' | xargs)
         csv_backup=$(echo "$csv_backup" | sed 's/^"//;s/"$//' | xargs)
-        csv_dry_run=$(echo "$csv_dry_run" | sed 's/^"//;s/"$//' | xargs)
         
         # Set variables for current row
         USER_NAME="$csv_username"
@@ -568,12 +567,7 @@ process_csv_file() {
             BACKUP_KEYS=false
         fi
         
-        # Set dry run mode
-        if [[ "$csv_dry_run" =~ ^[Tt][Rr][Uu][Ee]$ ]]; then
-            DRY_RUN=true
-        else
-            DRY_RUN=false
-        fi
+        # Note: DRY_RUN is controlled by command line flag, not CSV
         
         # Process current row
         if process_single_operation; then
