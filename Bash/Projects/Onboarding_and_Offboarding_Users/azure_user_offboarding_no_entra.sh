@@ -3,8 +3,8 @@
 #################################################################################
 # Azure User Offboarding Script
 # Description: Automates the offboarding process for users from Azure resources
-#              Supports optional Microsoft Entra ID operations (requires additional permissions)
-#              Core functionality works with Azure subscription Owner role
+#              Removes Azure resource access for existing users
+#              Requires Azure subscription Owner role
 #################################################################################
 
 set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
@@ -299,14 +299,7 @@ check_permissions() {
         log "INFO" "The script will proceed - actual operations will succeed/fail based on your effective permissions."
     fi
     
-    # Check Entra ID permissions only if required
-    if [[ "$ENTRA_OPERATIONS" == "true" ]]; then
-        log "INFO" "Checking Microsoft Entra ID permissions..."
-        log "WARN" "Entra ID operations enabled - ensure you have User Administrator or Groups Administrator role"
-        log "INFO" "If Entra ID operations fail, consider running without --entra-operations"
-    else
-        log "INFO" "Entra ID operations disabled - Azure access removal only"
-    fi
+    log "INFO" "Azure resource access removal only"
 }
 
 # Validate user input
@@ -358,28 +351,10 @@ get_user_info() {
     
     log "INFO" "Creating user data backup..."
     
-    # Initialize backup structure
+    # Initialize backup structure with empty data
     local user_details='{}' 
     local group_memberships='[]'
     local owned_apps='[]'
-    
-    # Only get Entra ID data if operations are enabled
-    if [[ "$ENTRA_OPERATIONS" == "true" ]]; then
-        if ! check_user_exists; then
-            log "WARN" "Cannot gather Entra ID user info - user does not exist"
-        else
-            # Get basic user information
-            user_details=$(az entra user show --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo '{}')
-            
-            # Get user's group memberships
-            group_memberships=$(az entra user get-member-groups --id "$USER_PRINCIPAL_NAME" --output json 2>/dev/null || echo '[]')
-            
-            # Get user's owned applications (if any)
-            owned_apps=$(az entra app list --filter "owners/any(o:o/id eq '$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)')" --output json 2>/dev/null || echo '[]')
-        fi
-    else
-        log "INFO" "Skipping Entra ID data collection (--entra-operations not specified)"
-    fi
     
     # Get user's role assignments across all scopes (Azure subscription level)
     local role_assignments=$(az role assignment list --assignee "$USER_PRINCIPAL_NAME" --all --output json 2>/dev/null || echo '[]')
@@ -407,12 +382,6 @@ EOF
     return 0
 }
 
-# Skip Microsoft Entra ID group operations (replaced remove_from_groups)
-skip_entra_group_removal() {
-    print_operation_status "Microsoft Entra ID Group Removal" "skip" "Entra ID operations require special permissions - skipped"
-    log "INFO" "Skipping Entra ID group removal - requires User Administrator or Groups Administrator role"
-    return 0
-}
 
 # Revoke RBAC role assignments
 revoke_rbac_roles() {
@@ -503,51 +472,6 @@ revoke_rbac_roles() {
         else
             print_operation_status "RBAC Role Revocation" "success" "[DRY RUN] Would revoke $role_count role assignments"
         fi
-    fi
-}
-
-# Skip Microsoft Entra ID user disabling (replaced disable_user_account)
-skip_user_disabling() {
-    print_operation_status "Microsoft Entra ID User Disabling" "skip" "Entra ID operations require special permissions - skipped"
-    log "INFO" "Skipping user account disabling - requires User Administrator role"
-    return 0
-}
-
-# Check for owned resources that need reassignment
-check_owned_resources() {
-    if [[ "$ENTRA_OPERATIONS" != "true" ]]; then
-        echo -e "   ${YELLOW}⏭️  Skipping owned resources check (--entra-operations not specified)${NC}"
-        return 0
-    fi
-    
-    log "INFO" "Checking for resources owned by the user..."
-    
-    if ! check_user_exists; then
-        return 1
-    fi
-    
-    local user_id=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query id -o tsv)
-    
-    # Check for owned applications
-    local owned_apps=$(az entra app list --filter "owners/any(o:o/id eq '$user_id')" --query "[].{displayName:displayName,appId:appId}" -o json 2>/dev/null || echo "[]")
-    local app_count=$(echo "$owned_apps" | jq '. | length')
-    
-    if [[ "$app_count" -gt 0 ]]; then
-        log "WARN" "User owns $app_count application(s) that may need ownership transfer:"
-        echo "$owned_apps" | jq -r '.[] | "  - \(.displayName) (\(.appId))"' | while read -r line; do
-            log "WARN" "$line"
-        done
-    fi
-    
-    local owned_objects=$(az entra user show --id "$USER_PRINCIPAL_NAME" --query "ownedObjects[].{displayName:displayName, objectType:['@odata.type']}" -o json 2>/dev/null || echo "[]")
-    local owned_count=$(echo "$owned_objects" | jq '. | length' 2>/dev/null || echo "0")
-    
-    if [[ "$owned_count" -gt 0 ]]; then
-        echo -e "   ${YELLOW}⚠️  Warning: User owns $owned_count resources that may need reassignment:${NC}"
-        echo "$owned_objects" | jq -r '.[] | "      - \(.displayName) (\(.objectType))"' 2>/dev/null || true
-        log "WARN" "User owns $owned_count resources that may need manual reassignment"
-    else
-        echo -e "   ${GREEN}✅ User does not own any resources requiring reassignment${NC}"
     fi
 }
 
@@ -731,10 +655,8 @@ generate_summary() {
     echo -e "${BLUE}│                           OPERATIONS                            │${NC}"
     echo -e "${BLUE}├──────────────────────────────────────────────────────────────────┤${NC}"
     
-    [[ "$ENTRA_OPERATIONS" == "true" && "$REMOVE_FROM_GROUPS" == "true" ]] && echo -e "${BLUE}│ ✓ Group membership removal $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
     [[ "$REVOKE_RBAC_ROLES" == "true" ]] && echo -e "${BLUE}│ ✓ RBAC role revocation     $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
-    [[ "$ENTRA_OPERATIONS" == "true" && "$DISABLE_USER" == "true" ]] && echo -e "${BLUE}│ ✓ User account disabling   $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
-    [[ "$MANAGE_VMS" == "true" ]] && echo -e "${BLUE}│ ✓ VM SSH key removal      $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
+    [[ "$MANAGE_VMS" == "true" ]] && echo -e "${BLUE}│ ✓ VM SSH key removal       $(if [[ "$DRY_RUN" == "true" ]]; then echo "[DRY RUN]"; else echo "[EXECUTED]"; fi)${NC}"
     
     echo -e "${BLUE}└──────────────────────────────────────────────────────────────────┘${NC}"
     echo
@@ -752,8 +674,7 @@ confirm_execution() {
     echo -e "${YELLOW}Subscription: $SUBSCRIPTION_ID${NC}"
     echo
     echo "Actions to be performed:"
-    [[ "$DISABLE_USER" == "true" ]] && echo "  ✓ Disable user account"
-    [[ "$REMOVE_FROM_GROUPS" == "true" ]] && echo "  ✓ Remove from Microsoft Entra ID groups"
+
     [[ "$REVOKE_RBAC_ROLES" == "true" ]] && echo "  ✓ Revoke RBAC role assignments"
     [[ "$BACKUP_DATA" == "true" ]] && echo "  ✓ Create backup of user access data"
     if [[ "$MANAGE_VMS" == "true" ]]; then
@@ -779,16 +700,16 @@ main() {
     # Phase 1: Prerequisites and Validation
     print_section "🔍 PHASE 1: Prerequisites & Validation" "$BLUE"
     
-    print_progress "1" "7" "Checking prerequisites"
+    print_progress "1" "6" "Checking prerequisites"
     check_prerequisites
     
-    print_progress "2" "7" "Verifying permissions"
+    print_progress "2" "6" "Verifying permissions"
     check_permissions
     
-    print_progress "3" "7" "Validating input parameters"
+    print_progress "3" "6" "Validating input parameters"
     validate_input
     
-    print_progress "4" "7" "Verifying user exists"
+    print_progress "4" "6" "Verifying user exists"
     if ! check_user_exists; then
         echo -e "${RED}❌ Error: User $USER_PRINCIPAL_NAME does not exist in Microsoft Entra ID${NC}"
         exit 1
@@ -798,13 +719,10 @@ main() {
     # Phase 2: Information Gathering
     print_section "📊 PHASE 2: Information Gathering" "$BLUE"
     
-    print_progress "5" "7" "Gathering user information"
+    print_progress "5" "6" "Gathering user information"
     get_user_info
-    
-    print_progress "6" "7" "Checking owned resources"
-    check_owned_resources
-    
-    print_progress "7" "7" "Confirming execution"
+
+    print_progress "6" "6" "Confirming execution"
     confirm_execution
     
     # Phase 3: Offboarding Operations
@@ -815,16 +733,10 @@ main() {
     echo
     
     # Execute offboarding steps
-    skip_entra_group_removal
-    echo
-    
     revoke_rbac_roles
     echo
     
     remove_vm_ssh_access
-    echo
-    
-    skip_user_disabling
     echo
     
     # Phase 4: Summary and Cleanup
