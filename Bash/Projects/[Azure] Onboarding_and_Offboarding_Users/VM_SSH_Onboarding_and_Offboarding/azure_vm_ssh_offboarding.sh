@@ -104,7 +104,7 @@ Usage: $0 [COMMAND_LINE_OPTIONS | -f <csv_file>]
 **FUNCTIONALITY:**
 - Remove specific SSH public keys from Azure VMs (azroot account)
 - Remove all SSH keys from Azure VMs (azroot account)
-- Support for multiple VMs
+- Support for multiple VMs or auto-discovery of all VMs in resource group
 - Automatic backup of authorized_keys before modification
 - Import parameters from CSV file for batch operations
 
@@ -154,6 +154,8 @@ username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_ke
 john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true
 jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false
 mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true
+# Empty vm_names field will auto-discover all VMs in the resource group:
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,false,true
 
 EOF
 }
@@ -218,9 +220,10 @@ validate_input() {
         exit 1
     fi
     
-    if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
-        log "ERROR" "At least one VM name is required"
-        exit 1
+    # VM names are optional - if empty, we'll discover all VMs in the resource group
+    if [[ ${#VM_NAMES[@]:-0} -eq 0 ]]; then
+        # Silent discovery - will be logged during actual discovery
+        :
     fi
     
     if [[ "$REMOVE_ALL_KEYS" == "false" && -z "$SSH_PUBLIC_KEY" ]]; then
@@ -299,6 +302,101 @@ validate_ssh_key() {
     log "SUCCESS" "SSH key validation completed"
 }
 
+# Discover all VMs in a resource group
+discover_vms_in_resource_group() {
+    local subscription_id="$1"
+    local resource_group="$2"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        # For dry run, return some example VM names (one per line)
+        echo "example-vm1"
+        echo "example-vm2" 
+        echo "example-vm3"
+        return 0
+    fi
+    
+    # Verify subscription is set correctly
+    local current_sub
+    current_sub=$(az account show --query id -o tsv 2>/dev/null)
+    if [[ "$current_sub" != "$subscription_id" ]]; then
+        az account set --subscription "$subscription_id" 2>/dev/null || {
+            log "ERROR" "Failed to set subscription '$subscription_id'" >&2
+            return 1
+        }
+    fi
+    
+    # Get list of VM names from Azure with error handling
+    local vm_list
+    local az_error
+    vm_list=$(az vm list --resource-group "$resource_group" --query '[].name' -o tsv 2>&1)
+    local exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
+        log "ERROR" "Azure CLI command failed (exit code: $exit_code)" >&2
+        log "ERROR" "Error details: $vm_list" >&2
+        return 1
+    fi
+    
+    # Remove any empty lines and trim whitespace
+    vm_list=$(echo "$vm_list" | grep -v '^$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    if [[ -z "$vm_list" ]]; then
+        log "WARNING" "No VMs found in resource group '$resource_group'" >&2
+        log "INFO" "Verifying resource group exists..." >&2
+        az group show --name "$resource_group" >/dev/null 2>&1 || {
+            log "ERROR" "Resource group '$resource_group' does not exist or is not accessible" >&2
+            return 1
+        }
+        return 1
+    fi
+    
+    local vm_count
+    vm_count=$(echo "$vm_list" | wc -l | tr -d ' ')
+    log "SUCCESS" "Discovered $vm_count VM(s) in resource group '$resource_group'" >&2
+    
+    echo "$vm_list"
+    return 0
+}
+
+# Prompt for confirmation before performing operations
+prompt_for_confirmation() {
+    local operation="$1"
+    local vm_count="$2"
+    local vm_list="$3"
+    
+    echo -e "\n${YELLOW}⚠️  CONFIRMATION REQUIRED${NC}"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo -e "${BLUE}Operation:${NC} $operation"
+    echo -e "${BLUE}VM Count:${NC} $vm_count VM(s)"
+    echo -e "${BLUE}Target VMs:${NC} $vm_list"
+    echo -e "${BLUE}User:${NC} $USER_NAME"
+    echo -e "${BLUE}Subscription:${NC} $SUBSCRIPTION_ID"
+    echo "═══════════════════════════════════════════════════════════════"
+    if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
+        echo -e "${YELLOW}This will REMOVE ALL SSH keys from the azroot account on the specified VMs.${NC}"
+    else
+        echo -e "${YELLOW}This will REMOVE the specified SSH key from the azroot account on the specified VMs.${NC}"
+    fi
+    echo ""
+    
+    while true; do
+        read -p "Do you want to continue? [y/N]: " -r response < /dev/tty
+        case "$response" in
+            [Yy]|[Yy][Ee][Ss])
+                echo -e "\n${GREEN}✓ Confirmed. Proceeding with operation...${NC}"
+                return 0
+                ;;
+            [Nn]|[Nn][Oo]|"")
+                echo -e "\n${YELLOW}✗ Operation cancelled by user.${NC}"
+                return 1
+                ;;
+            *)
+                echo -e "${RED}Please enter 'y' for yes or 'n' for no.${NC}"
+                ;;
+        esac
+    done
+}
+
 # Remove SSH keys from Azure VMs (azroot account only)
 remove_vm_ssh_access() {
     print_section "Removing VM SSH Access"
@@ -308,20 +406,67 @@ remove_vm_ssh_access() {
     shift 2
     local vm_names=("$@")
     
+    # Check if we need to discover VMs (empty array or array with only empty strings)
+    local needs_discovery=true
+    for vm_name in "${vm_names[@]}"; do
+        if [[ -n "$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]]; then
+            needs_discovery=false
+            break
+        fi
+    done
+    if [[ ${#vm_names[@]} -eq 0 ]]; then
+        needs_discovery=true
+    fi
+    
+    # If no VM names provided or all are empty, discover all VMs in the resource group
+    if [[ "$needs_discovery" == "true" ]]; then
+        
+        # Reset the array since we found only empty elements
+        vm_names=()
+        
+        local discovered_vms
+        if discovered_vms=$(discover_vms_in_resource_group "$subscription_id" "$resource_group"); then
+            # Handle the case where there might be only one VM name without newlines
+            if [[ -n "$discovered_vms" ]]; then
+                # Split by newlines and add to array
+                while IFS= read -r vm_name; do
+                    # Trim whitespace
+                    vm_name=$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                    
+                    if [[ -n "$vm_name" ]]; then
+                        vm_names+=("$vm_name")
+                    fi
+                done <<< "$discovered_vms"
+            fi
+            
+            if [[ ${#vm_names[@]} -eq 0 ]]; then
+                log "ERROR" "No valid VM names found after filtering"
+                return 1
+            fi
+        else
+            log "ERROR" "Failed to discover VMs in resource group '$resource_group'"
+            return 1
+        fi
+    fi
+    
+    # Prompt for confirmation if not in dry-run mode
+    if [[ "$DRY_RUN" != "true" ]]; then
+        local vm_list_str="$(IFS=', '; echo "${vm_names[*]}")"
+        local operation_type="SSH Key Removal"
+        if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
+            operation_type="All SSH Keys Removal"
+        fi
+        
+        if ! prompt_for_confirmation "$operation_type" "${#vm_names[@]}" "$vm_list_str"; then
+            log "INFO" "Operation cancelled by user"
+            return 1
+        fi
+    fi
+    
     print_operation_status "SSH Key Removal" "start" "Processing ${#vm_names[@]} VMs"
     
     for vm_name in "${vm_names[@]}"; do
         print_progress "$((++current_vm))" "${#vm_names[@]}" "Processing VM: $vm_name"
-        
-        # Check if VM exists and is running
-        local vm_status=$(az vm get-instance-view --resource-group "$resource_group" --name "$vm_name" \
-                         --query "instanceView.statuses[?code=='PowerState/running']" -o tsv 2>/dev/null || echo "")
-        
-        if [[ -z "$vm_status" ]]; then
-            print_operation_status "VM Check: $vm_name" "error" "VM not found or not running"
-            log "ERROR" "VM $vm_name is not running or does not exist in resource group $resource_group"
-            continue
-        fi
         
         if [[ "$DRY_RUN" == "true" ]]; then
             if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
@@ -332,6 +477,16 @@ remove_vm_ssh_access() {
                 log "INFO" "DRY RUN: Would remove specific SSH key from $vm_name (azroot account)"
             fi
         else
+            # Check if VM exists and is running (only in non-dry-run mode)
+            local vm_status=$(az vm get-instance-view --resource-group "$resource_group" --name "$vm_name" \
+                             --query "instanceView.statuses[?code=='PowerState/running']" -o tsv 2>/dev/null || echo "")
+            
+            if [[ -z "$vm_status" ]]; then
+                print_operation_status "VM Check: $vm_name" "error" "VM not found or not running"
+                log "ERROR" "VM $vm_name is not running or does not exist in resource group $resource_group"
+                continue
+            fi
+            
             remove_ssh_keys_from_vm "$vm_name" "$resource_group"
         fi
     done
@@ -544,11 +699,15 @@ process_csv_file() {
         VM_RESOURCE_GROUP="$csv_resource_group"
         
         # Parse VM names (handle comma-separated values)
-        IFS=',' read -ra VM_NAMES <<< "$csv_vm_names"
-        # Trim whitespace from each VM name
-        for i in "${!VM_NAMES[@]}"; do
-            VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
-        done
+        if [[ -n "$csv_vm_names" ]]; then
+            IFS=',' read -ra VM_NAMES <<< "$csv_vm_names"
+            # Trim whitespace from each VM name
+            for i in "${!VM_NAMES[@]}"; do
+                VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
+            done
+        else
+            VM_NAMES=()
+        fi
         
         # Set remove all keys mode
         if [[ "$csv_remove_all" =~ ^[Tt][Rr][Uu][Ee]$ ]]; then
@@ -617,7 +776,7 @@ process_single_operation() {
     
     # Remove SSH access from VMs for current operation
     current_vm=0
-    if ! remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]}"; then
+    if ! remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"; then
         return 1
     fi
     
@@ -644,9 +803,10 @@ validate_input_for_row() {
         validation_failed=true
     fi
     
-    if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
-        log "ERROR" "At least one VM name is required (CSV column: vm_names)"
-        validation_failed=true
+    # VM names are optional - if empty, we'll discover all VMs in the resource group
+    if [[ ${#VM_NAMES[@]:-0} -eq 0 ]]; then
+        # Silent discovery - will be logged during actual discovery
+        :
     fi
     
     # Check that either SSH key is provided or remove_all_keys is true
@@ -758,7 +918,7 @@ main() {
         
         # Remove SSH access from VMs
         current_vm=0
-        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]}"
+        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"
         
         # Generate summary
         generate_summary
