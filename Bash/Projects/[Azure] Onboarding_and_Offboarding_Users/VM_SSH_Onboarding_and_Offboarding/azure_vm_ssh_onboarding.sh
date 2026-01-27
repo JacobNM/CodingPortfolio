@@ -101,7 +101,7 @@ Usage: $0 [COMMAND_LINE_OPTIONS | -f <csv_file>]
 
 **FUNCTIONALITY:**
 - Add SSH public keys to Azure VMs (azroot account)
-- Support for multiple VMs
+- Support for multiple VMs or auto-discovery of all VMs in resource group
 - Import parameters from CSV file for batch operations
 
 **COMMAND LINE MODE:**
@@ -110,7 +110,7 @@ Required Parameters:
     -s, --subscription <subscription_id> Azure subscription ID
     -k, --key <ssh_public_key>         SSH public key file path or key content
     -g, --resource-group <vm_resource_group> Resource group containing VMs
-    -v, --vm <vm_name>                 VM name (can be specified multiple times)
+    -v, --vm <vm_name>                 VM name (can be specified multiple times, optional - if omitted, all VMs in resource group will be used)
 
 Optional Parameters:
     -d, --dry-run                      Dry run mode (show what would be done)
@@ -119,20 +119,24 @@ Optional Parameters:
 **CSV FILE MODE:**
     -f, --file <csv_file>              CSV file containing onboarding parameters
                            Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names
-                           VM names can be comma-separated within quotes
+                           VM names can be comma-separated within quotes (or empty for auto-discovery)
 
 Examples:
     # Command line mode - Add SSH key to single VM (short options)
     $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
        -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
 
-    # Command line mode - Add SSH key to multiple VMs (long options)
+    # Command line mode - Add SSH key to ALL VMs in resource group (auto-discovery)
+    $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
+       -k ~/.ssh/id_rsa.pub -g "myvm-rg"
+
+    # Command line mode - Add SSH key to multiple specific VMs (long options)
     $0 --username jane.smith --subscription "12345678-1234-1234-1234-123456789012" \\
        --key ~/.ssh/id_rsa.pub --resource-group "myvm-rg" --vm "vm01" --vm "vm02" --vm "vm03"
 
-    # Command line mode - Dry run (mixed options)
+    # Command line mode - Dry run with auto-discovery (mixed options)
     $0 -u john.doe --subscription "12345678-1234-1234-1234-123456789012" \\
-       --key ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" --dry-run
+       --key ~/.ssh/id_rsa.pub -g "myvm-rg" --dry-run
 
     # CSV file mode - Batch processing
     $0 --file onboarding_batch.csv --dry-run
@@ -141,7 +145,9 @@ Examples:
 username,subscription_id,ssh_public_key,vm_resource_group,vm_names
 john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02"
 jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05,vm06"
+# Empty vm_names field will auto-discover all VMs in the resource group:
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 
 EOF
 }
@@ -211,9 +217,9 @@ validate_input() {
         exit 1
     fi
     
-    if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
-        log "ERROR" "At least one VM name is required"
-        exit 1
+    # VM names are optional - if empty, we'll discover all VMs in the resource group
+    if [[ ${#VM_NAMES[@]:-0} -eq 0 ]]; then
+        log "INFO" "No VM names specified - will discover all VMs in resource group '$VM_RESOURCE_GROUP'"
     fi
     
     log "SUCCESS" "Input validation completed"
@@ -268,6 +274,102 @@ validate_ssh_key() {
     log "SUCCESS" "SSH key validation completed"
 }
 
+# Discover all VMs in a resource group
+discover_vms_in_resource_group() {
+    local subscription_id="$1"
+    local resource_group="$2"
+    
+    log "INFO" "Discovering VMs in resource group '$resource_group' under subscription '$subscription_id'..." >&2
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "INFO" "[DRY RUN] Would discover VMs in subscription '$subscription_id', resource group '$resource_group'" >&2
+        # For dry run, return some example VM names (one per line)
+        echo "example-vm1"
+        echo "example-vm2" 
+        echo "example-vm3"
+        return 0
+    fi
+    
+    # Verify subscription is set correctly
+    local current_sub
+    current_sub=$(az account show --query id -o tsv 2>/dev/null)
+    if [[ "$current_sub" != "$subscription_id" ]]; then
+        log "INFO" "Setting subscription to '$subscription_id'" >&2
+        az account set --subscription "$subscription_id" 2>/dev/null || {
+            log "ERROR" "Failed to set subscription '$subscription_id'" >&2
+            return 1
+        }
+    fi
+    
+    # Get list of VM names from Azure with error handling
+    local vm_list
+    local az_error
+    vm_list=$(az vm list --resource-group "$resource_group" --query '[].name' -o tsv 2>&1)
+    local exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
+        log "ERROR" "Azure CLI command failed (exit code: $exit_code)" >&2
+        log "ERROR" "Error details: $vm_list" >&2
+        return 1
+    fi
+    
+    # Remove any empty lines and trim whitespace
+    vm_list=$(echo "$vm_list" | grep -v '^$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    if [[ -z "$vm_list" ]]; then
+        log "WARNING" "No VMs found in resource group '$resource_group'" >&2
+        log "INFO" "Verifying resource group exists..." >&2
+        az group show --name "$resource_group" >/dev/null 2>&1 || {
+            log "ERROR" "Resource group '$resource_group' does not exist or is not accessible" >&2
+            return 1
+        }
+        return 1
+    fi
+    
+    local vm_count
+    vm_count=$(echo "$vm_list" | wc -l | tr -d ' ')
+    log "SUCCESS" "Discovered $vm_count VM(s) in resource group '$resource_group'" >&2
+    log "INFO" "VM names: $(echo "$vm_list" | tr '\n' ' ')" >&2
+    
+    echo "$vm_list"
+    return 0
+}
+
+# Prompt for confirmation before performing operations
+prompt_for_confirmation() {
+    local operation="$1"
+    local vm_count="$2"
+    local vm_list="$3"
+    
+    echo -e "\n${YELLOW}⚠️  CONFIRMATION REQUIRED${NC}"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo -e "${BLUE}Operation:${NC} $operation"
+    echo -e "${BLUE}VM Count:${NC} $vm_count VM(s)"
+    echo -e "${BLUE}Target VMs:${NC} $vm_list"
+    echo -e "${BLUE}User:${NC} $USER_NAME"
+    echo -e "${BLUE}Subscription:${NC} $SUBSCRIPTION_ID"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo -e "${YELLOW}This will ADD SSH keys to the azroot account on the specified VMs.${NC}"
+    echo ""
+    
+    while true; do
+        read -p "Do you want to continue? [y/N]: " -r response < /dev/tty
+        case "$response" in
+            [Yy]|[Yy][Ee][Ss])
+                echo -e "\n${GREEN}✓ Confirmed. Proceeding with operation...${NC}"
+                return 0
+                ;;
+            [Nn]|[Nn][Oo]|"")
+                echo -e "\n${YELLOW}✗ Operation cancelled by user.${NC}"
+                return 1
+                ;;
+            *)
+                echo -e "${RED}Please enter 'y' for yes or 'n' for no.${NC}"
+                ;;
+        esac
+    done
+}
+
 # Manage SSH keys on Azure VMs (azroot account only)
 manage_vm_ssh_access() {
     print_section "Managing VM SSH Access"
@@ -277,25 +379,95 @@ manage_vm_ssh_access() {
     shift 2
     local vm_names=("$@")
     
+    # Check if we need to discover VMs (empty array or array with only empty strings)
+    local needs_discovery=true
+    if [[ ${#vm_names[@]} -gt 0 ]]; then
+        # Check if any non-empty VM names exist
+        for vm_name in "${vm_names[@]}"; do
+            if [[ -n "$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]]; then
+                needs_discovery=false
+                break
+            fi
+        done
+    fi
+    
+    # If no VM names provided or all are empty, discover all VMs in the resource group
+    if [[ "$needs_discovery" == "true" ]]; then
+        log "INFO" "No specific VM names provided - discovering all VMs in resource group '$resource_group'..."
+        
+        # Reset the array since we found only empty elements
+        vm_names=()
+        
+        local discovered_vms
+        if discovered_vms=$(discover_vms_in_resource_group "$subscription_id" "$resource_group"); then
+            # Handle the case where there might be only one VM name without newlines
+            if [[ -n "$discovered_vms" ]]; then
+                # Split by newlines and add to array
+                while IFS= read -r vm_name; do
+                    # Trim whitespace
+                    vm_name=$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                    
+                    if [[ -n "$vm_name" ]]; then
+                        vm_names+=("$vm_name")
+                    fi
+                done <<< "$discovered_vms"
+            fi
+            
+            if [[ ${#vm_names[@]} -eq 0 ]]; then
+                log "ERROR" "No valid VM names found after filtering"
+                return 1
+            fi
+            
+            log "INFO" "Will process ${#vm_names[@]} discovered VM(s): ${vm_names[*]}"
+        else
+            log "ERROR" "Failed to discover VMs in resource group '$resource_group'"
+            return 1
+        fi
+    fi
+    
+    # Prompt for confirmation if not in dry-run mode
+    if [[ "$DRY_RUN" != "true" ]]; then
+        # Filter out empty elements and create display string
+        local vm_list_str=""
+        local valid_vms=()
+        for vm_name in "${vm_names[@]}"; do
+            if [[ -n "$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]]; then
+                valid_vms+=("$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')")
+            fi
+        done
+        
+        # Safe array expansion for bash strict mode
+        if [[ ${#valid_vms[@]} -gt 0 ]]; then
+            vm_list_str="$(IFS=', '; echo "${valid_vms[*]}")"
+        else
+            vm_list_str="(No valid VMs found)"
+        fi
+        
+        if ! prompt_for_confirmation "SSH Key Addition" "${#valid_vms[@]}" "$vm_list_str"; then
+            log "INFO" "Operation cancelled by user"
+            return 1
+        fi
+    fi
+    
     print_operation_status "SSH Key Management" "start" "Processing ${#vm_names[@]} VMs"
     
     for vm_name in "${vm_names[@]}"; do
         print_progress "$((++current_vm))" "${#vm_names[@]}" "Processing VM: $vm_name"
         
-        # Check if VM exists and is running
-        local vm_status=$(az vm get-instance-view --resource-group "$resource_group" --name "$vm_name" \
-                         --query "instanceView.statuses[?code=='PowerState/running']" -o tsv 2>/dev/null || echo "")
-        
-        if [[ -z "$vm_status" ]]; then
-            print_operation_status "VM Check: $vm_name" "error" "VM not found or not running"
-            log "ERROR" "VM $vm_name is not running or does not exist in resource group $resource_group"
-            continue
-        fi
-        
         if [[ "$DRY_RUN" == "true" ]]; then
             print_operation_status "SSH Key Addition: $vm_name" "skip" "Dry run mode - would add SSH key to azroot account"
             log "INFO" "DRY RUN: Would add SSH key to $vm_name (azroot account)"
         else
+            # Check if VM exists and is running (only in non-dry-run mode)
+            local vm_status=$(az vm get-instance-view --resource-group "$resource_group" --name "$vm_name" \
+                             --query "instanceView.statuses[?code=='PowerState/running']" -o tsv 2>/dev/null || echo "")
+            
+            if [[ -z "$vm_status" ]]; then
+                print_operation_status "VM Check: $vm_name" "error" "VM not found or not running"
+                log "ERROR" "VM $vm_name is not running or does not exist in resource group $resource_group"
+                continue
+            fi
+            
             add_ssh_key_to_vm "$vm_name" "$resource_group"
         fi
     done
@@ -517,7 +689,7 @@ process_single_operation() {
     
     # Manage SSH access on VMs for current operation
     current_vm=0
-    if ! manage_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]}"; then
+    if ! manage_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"; then
         return 1
     fi
     
@@ -549,9 +721,9 @@ validate_input_for_row() {
         validation_failed=true
     fi
     
-    if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
-        log "ERROR" "At least one VM name is required (CSV column: vm_names)"
-        validation_failed=true
+    # VM names are optional - if empty, we'll discover all VMs in the resource group
+    if [[ ${#VM_NAMES[@]:-0} -eq 0 ]]; then
+        log "INFO" "No VM names specified for user '$USER_NAME' - will discover all VMs in resource group '$VM_RESOURCE_GROUP'"
     fi
     
     if [[ "$validation_failed" == "true" ]]; then
@@ -649,7 +821,7 @@ main() {
         
         # Manage SSH access on VMs
         current_vm=0
-        manage_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]}"
+        manage_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"
         
         # Generate summary
         generate_summary
