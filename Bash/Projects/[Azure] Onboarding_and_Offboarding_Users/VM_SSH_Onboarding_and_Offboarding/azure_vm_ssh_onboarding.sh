@@ -279,10 +279,7 @@ discover_vms_in_resource_group() {
     local subscription_id="$1"
     local resource_group="$2"
     
-    log "INFO" "Discovering VMs in resource group '$resource_group' under subscription '$subscription_id'..." >&2
-    
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "INFO" "[DRY RUN] Would discover VMs in subscription '$subscription_id', resource group '$resource_group'" >&2
         # For dry run, return some example VM names (one per line)
         echo "example-vm1"
         echo "example-vm2" 
@@ -294,7 +291,6 @@ discover_vms_in_resource_group() {
     local current_sub
     current_sub=$(az account show --query id -o tsv 2>/dev/null)
     if [[ "$current_sub" != "$subscription_id" ]]; then
-        log "INFO" "Setting subscription to '$subscription_id'" >&2
         az account set --subscription "$subscription_id" 2>/dev/null || {
             log "ERROR" "Failed to set subscription '$subscription_id'" >&2
             return 1
@@ -329,7 +325,6 @@ discover_vms_in_resource_group() {
     local vm_count
     vm_count=$(echo "$vm_list" | wc -l | tr -d ' ')
     log "SUCCESS" "Discovered $vm_count VM(s) in resource group '$resource_group'" >&2
-    log "INFO" "VM names: $(echo "$vm_list" | tr '\n' ' ')" >&2
     
     echo "$vm_list"
     return 0
@@ -381,19 +376,18 @@ manage_vm_ssh_access() {
     
     # Check if we need to discover VMs (empty array or array with only empty strings)
     local needs_discovery=true
-    if [[ ${#vm_names[@]} -gt 0 ]]; then
-        # Check if any non-empty VM names exist
-        for vm_name in "${vm_names[@]}"; do
-            if [[ -n "$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]]; then
-                needs_discovery=false
-                break
-            fi
-        done
+    for vm_name in "${vm_names[@]}"; do
+        if [[ -n "$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]]; then
+            needs_discovery=false
+            break
+        fi
+    done
+    if [[ ${#vm_names[@]} -eq 0 ]]; then
+        needs_discovery=true
     fi
     
     # If no VM names provided or all are empty, discover all VMs in the resource group
     if [[ "$needs_discovery" == "true" ]]; then
-        log "INFO" "No specific VM names provided - discovering all VMs in resource group '$resource_group'..."
         
         # Reset the array since we found only empty elements
         vm_names=()
@@ -417,8 +411,6 @@ manage_vm_ssh_access() {
                 log "ERROR" "No valid VM names found after filtering"
                 return 1
             fi
-            
-            log "INFO" "Will process ${#vm_names[@]} discovered VM(s): ${vm_names[*]}"
         else
             log "ERROR" "Failed to discover VMs in resource group '$resource_group'"
             return 1
@@ -427,23 +419,9 @@ manage_vm_ssh_access() {
     
     # Prompt for confirmation if not in dry-run mode
     if [[ "$DRY_RUN" != "true" ]]; then
-        # Filter out empty elements and create display string
-        local vm_list_str=""
-        local valid_vms=()
-        for vm_name in "${vm_names[@]}"; do
-            if [[ -n "$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]]; then
-                valid_vms+=("$(echo "$vm_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')")
-            fi
-        done
+        local vm_list_str="$(IFS=', '; echo "${vm_names[*]}")"
         
-        # Safe array expansion for bash strict mode
-        if [[ ${#valid_vms[@]} -gt 0 ]]; then
-            vm_list_str="$(IFS=', '; echo "${valid_vms[*]}")"
-        else
-            vm_list_str="(No valid VMs found)"
-        fi
-        
-        if ! prompt_for_confirmation "SSH Key Addition" "${#valid_vms[@]}" "$vm_list_str"; then
+        if ! prompt_for_confirmation "SSH Key Addition" "${#vm_names[@]}" "$vm_list_str"; then
             log "INFO" "Operation cancelled by user"
             return 1
         fi
@@ -632,11 +610,15 @@ process_csv_file() {
         VM_RESOURCE_GROUP="$csv_resource_group"
         
         # Parse VM names (handle comma-separated values)
-        IFS=',' read -ra VM_NAMES <<< "$csv_vm_names"
-        # Trim whitespace from each VM name
-        for i in "${!VM_NAMES[@]}"; do
-            VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
-        done
+        if [[ -n "$csv_vm_names" ]]; then
+            IFS=',' read -ra VM_NAMES <<< "$csv_vm_names"
+            # Trim whitespace from each VM name
+            for i in "${!VM_NAMES[@]}"; do
+                VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
+            done
+        else
+            VM_NAMES=()
+        fi
         
         # Note: DRY_RUN is controlled by command line flag, not CSV
         
@@ -723,7 +705,8 @@ validate_input_for_row() {
     
     # VM names are optional - if empty, we'll discover all VMs in the resource group
     if [[ ${#VM_NAMES[@]:-0} -eq 0 ]]; then
-        log "INFO" "No VM names specified for user '$USER_NAME' - will discover all VMs in resource group '$VM_RESOURCE_GROUP'"
+        # Silent discovery - will be logged during actual discovery
+        :
     fi
     
     if [[ "$validation_failed" == "true" ]]; then
@@ -808,7 +791,6 @@ main() {
     else
         # Command Line Mode
         print_section "Command Line Mode"
-        log "INFO" "Processing SSH key onboarding from command line parameters"
         
         # Validate input
         validate_input
