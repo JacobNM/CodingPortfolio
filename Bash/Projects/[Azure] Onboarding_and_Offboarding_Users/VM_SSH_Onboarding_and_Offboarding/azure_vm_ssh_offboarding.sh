@@ -659,7 +659,8 @@ process_csv_file() {
     local failed_rows=0
     
     # Read CSV file line by line, skipping the header
-    while IFS=',' read -r csv_username csv_subscription csv_ssh_key csv_resource_group csv_vm_names csv_remove_all csv_backup || [[ -n "$csv_username" ]]; do
+    # Use a more robust CSV parser to handle quoted fields with commas
+    while IFS= read -r line || [[ -n "$line" ]]; do
         # Skip header row
         if [[ $line_number -eq 1 ]]; then
             line_number=$((line_number + 1))
@@ -667,21 +668,46 @@ process_csv_file() {
         fi
         
         # Skip empty lines
+        if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*$ ]]; then
+            line_number=$((line_number + 1))
+            continue
+        fi
+        
+        # Parse CSV line using python to handle quoted fields properly
+        local csv_fields
+        csv_fields=$(python3 -c "
+import csv
+import sys
+reader = csv.reader([sys.argv[1]])
+for row in reader:
+    for field in row:
+        print(repr(field))
+" "$line")
+        
+        # Extract fields from python output
+        local field_array=()
+        while IFS= read -r field; do
+            # Remove python repr quotes
+            field=$(echo "$field" | sed "s/^'//;s/'$//")
+            field_array+=("$field")
+        done <<< "$csv_fields"
+        
+        # Assign fields to variables (handle missing fields gracefully)
+        csv_username="${field_array[0]:-}"
+        csv_subscription="${field_array[1]:-}"
+        csv_ssh_key="${field_array[2]:-}"
+        csv_resource_group="${field_array[3]:-}"
+        csv_vm_names="${field_array[4]:-}"
+        csv_remove_all="${field_array[5]:-}"
+        csv_backup="${field_array[6]:-}"
+        
+        # Skip rows with empty essential fields
         if [[ -z "$csv_username" && -z "$csv_subscription" && -z "$csv_resource_group" ]]; then
             line_number=$((line_number + 1))
             continue
         fi
         
         print_progress "$((line_number-1))" "$line_count" "Processing user: $csv_username"
-        
-        # Clean up CSV fields (remove quotes and trim whitespace)
-        csv_username=$(echo "$csv_username" | sed 's/^"//;s/"$//' | xargs)
-        csv_subscription=$(echo "$csv_subscription" | sed 's/^"//;s/"$//' | xargs)
-        csv_ssh_key=$(echo "$csv_ssh_key" | sed 's/^"//;s/"$//' | xargs)
-        csv_resource_group=$(echo "$csv_resource_group" | sed 's/^"//;s/"$//' | xargs)
-        csv_vm_names=$(echo "$csv_vm_names" | sed 's/^"//;s/"$//' | xargs)
-        csv_remove_all=$(echo "$csv_remove_all" | sed 's/^"//;s/"$//' | xargs)
-        csv_backup=$(echo "$csv_backup" | sed 's/^"//;s/"$//' | xargs)
         
         # Set variables for current row
         USER_NAME="$csv_username"
@@ -690,11 +716,14 @@ process_csv_file() {
         VM_RESOURCE_GROUP="$csv_resource_group"
         
         # Parse VM names (handle comma-separated values)
+        # Remove any surrounding single quotes that might be embedded in the CSV field
+        csv_vm_names=$(echo "$csv_vm_names" | sed "s/^'\|'$//g")
+        
         if [[ -n "$csv_vm_names" ]]; then
             IFS=',' read -ra VM_NAMES <<< "$csv_vm_names"
-            # Trim whitespace from each VM name
+            # Trim whitespace and quotes from each VM name
             for i in "${!VM_NAMES[@]}"; do
-                VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
+                VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | sed "s/^'\|'$//g" | xargs)
             done
         else
             VM_NAMES=()
