@@ -1,12 +1,8 @@
 #!/bin/bash
-
-#################################################################################
 # Azure VM SSH Key Onboarding Script
-# Description: Automates adding SSH keys to Azure VMs for user access
-#              Adds SSH keys to the azroot account on specified VMs
-#################################################################################
+# Automates adding SSH keys to Azure VMs (azroot account)
 
-set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
+set -euo pipefail
 
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,9 +24,7 @@ VM_NAMES=()
 SSH_PUBLIC_KEY=""
 CSV_FILE=""
 
-#################################################################################
 # Functions
-#################################################################################
 
 # Logging function
 log() {
@@ -46,9 +40,7 @@ print_section() {
     local title="$1"
     local color="${2:-$BLUE}"
     echo
-    echo -e "${color}╭─────────────────────────────────────────────────────╮${NC}"
-    echo -e "${color}│ $title${NC}"
-    echo -e "${color}╰─────────────────────────────────────────────────────╯${NC}"
+    echo -e "${color}$title${NC}"
     echo
 }
 
@@ -164,11 +156,9 @@ check_prerequisites() {
     
     # Check if logged in to Azure
     if ! az account show &> /dev/null; then
-        log "ERROR" "Not logged in to Azure. Please run 'az login' first."
+        echo -e "${RED}Error: Not logged into Azure${NC}" >&2
         exit 1
     fi
-    
-    log "SUCCESS" "Prerequisites check completed"
 }
 
 # Check basic VM access permissions
@@ -810,5 +800,4 @@ main() {
     fi
 }
 
-# Run main function with all arguments
 main "$@"
