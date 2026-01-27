@@ -6,11 +6,11 @@ This repository contains two Bash scripts designed to automate the management of
 
 ### 🔑 `azure_vm_ssh_onboarding.sh`
 
-Adds SSH public keys to the `azroot` account on specified Azure VMs, enabling secure SSH access for users.
+Adds SSH public keys to the `azroot` account on specified Azure VMs, enabling secure SSH access for users. When no specific VM names are provided, the script automatically discovers and processes all VMs in the specified resource group.
 
 ### 🗑️ `azure_vm_ssh_offboarding.sh`  
 
-Removes SSH public keys from the `azroot` account on specified Azure VMs, revoking SSH access for users.
+Removes SSH public keys from the `azroot` account on specified Azure VMs, revoking SSH access for users. When no specific VM names are provided, the script automatically discovers and processes all VMs in the specified resource group.
 
 ## Prerequisites
 
@@ -54,12 +54,12 @@ Batch processing using CSV files containing multiple operations.
 | `-s <subscription_id>` | ✅* | Azure subscription ID |
 | `-k <ssh_public_key>` | ✅* | SSH public key file path or key content |
 | `-g <vm_resource_group>` | ✅* | Resource group containing VMs |
-| `-v <vm_name>` | ✅* | VM name (can be specified multiple times) |
+| `-v <vm_name>` | ❌* | VM name (can be specified multiple times, or omit for auto-discovery) |
 | `-f <csv_file>` | ✅** | CSV file for batch operations |
 | `-d` | ❌ | Dry run mode (show what would be done) |
 | `-h` | ❌ | Display help message |
 
-*Required for command line mode  
+*Required for command line mode (except `-v` which enables auto-discovery when omitted)  
 **Required for CSV file mode (replaces command line parameters)
 
 ### Usage Examples
@@ -86,6 +86,17 @@ Batch processing using CSV files containing multiple operations.
   -v "web-server-01" -v "web-server-02" -v "db-server-01"
 ```
 
+#### Add SSH key to all VMs in resource group (auto-discovery)
+
+```bash
+./azure_vm_ssh_onboarding.sh \
+  -u jane.smith \
+  -s "87654321-4321-4321-4321-210987654321" \
+  -k ~/.ssh/jane_key.pub \
+  -g "production-rg"
+  # No -v parameter = discovers all VMs automatically
+```
+
 #### Dry run to preview changes
 
 ```bash
@@ -97,6 +108,8 @@ Batch processing using CSV files containing multiple operations.
   -v "web-server-01" \
   -d
 ```
+
+*Note: Dry run mode bypasses confirmation prompts and shows what changes would be made*
 
 #### Using SSH key content directly
 
@@ -130,12 +143,15 @@ username,subscription_id,ssh_public_key,vm_resource_group,vm_names
 john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02,vm03"
 jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm04
 mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm05,vm06"
+# Empty vm_names field enables auto-discovery of all VMs in the resource group:
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 ```
 
 **CSV Requirements:**
 
 - Header row is required and must match exactly
 - Multiple VM names should be comma-separated and quoted
+- Leave vm_names empty for auto-discovery of all VMs in the resource group
 - SSH keys can be file paths or direct key content
 - Direct key content should be quoted to handle spaces
 
@@ -229,6 +245,8 @@ mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"v
 ./azure_vm_ssh_offboarding.sh -f offboarding_batch.csv -d
 ```
 
+*Note: Dry run mode bypasses confirmation prompts and shows what changes would be made*
+
 ### CSV File Format for Offboarding
 
 Create a CSV file with the following header and format:
@@ -238,12 +256,15 @@ username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_ke
 john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true
 jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false
 mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true
+# Empty vm_names field enables auto-discovery of all VMs in the resource group:
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,false,true
 ```
 
 **CSV Requirements:**
 
 - Header row is required and must match exactly
 - Multiple VM names should be comma-separated and quoted
+- Leave vm_names empty for auto-discovery of all VMs in the resource group
 - `ssh_public_key` can be empty if `remove_all_keys` is true
 - `remove_all_keys`: true/false - whether to remove all SSH keys
 - `backup_keys`: true/false - whether to backup authorized_keys before changes
@@ -309,6 +330,7 @@ mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"v
 
 ### 🛡️ Robust Error Handling
 
+- **Confirmation Prompts** - Interactive user confirmation required before making changes to VMs (bypassed in dry-run mode)
 - **Fail-Safe Processing** - Uses `set -euo pipefail` for strict error handling
 - **VM State Verification** - Checks `PowerState/running` before attempting operations
 - **Connection Validation** - Verifies Azure CLI authentication and permissions
@@ -334,6 +356,7 @@ mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"v
 ### ✅ Safety Measures
 
 - **Dry Run Mode** - Preview changes before execution (`-d` flag)
+- **Confirmation Prompts** - Interactive prompts require user confirmation before making changes to VMs
 - **Automatic Backups** - Offboarding script backs up `authorized_keys` before modification
 - **Input Validation** - Validates SSH key format and required parameters
 - **Permission Checks** - Verifies Azure access before making changes
