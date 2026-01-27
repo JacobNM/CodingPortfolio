@@ -1,12 +1,8 @@
 #!/bin/bash
-
-#################################################################################
 # Azure VM SSH Key Offboarding Script
-# Description: Automates removing SSH keys from Azure VMs for user access
-#              Removes SSH keys from the azroot account on specified VMs
-#################################################################################
+# Automates removing SSH keys from Azure VMs (azroot account)
 
-set -euo pipefail  # Exit on any error, undefined variable, or pipe failure
+set -euo pipefail
 
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,9 +26,7 @@ REMOVE_ALL_KEYS=false
 BACKUP_KEYS=true
 CSV_FILE=""
 
-#################################################################################
 # Functions
-#################################################################################
 
 # Logging function
 log() {
@@ -48,9 +42,7 @@ print_section() {
     local title="$1"
     local color="${2:-$BLUE}"
     echo
-    echo -e "${color}╭─────────────────────────────────────────────────────╮${NC}"
-    echo -e "${color}│ $title${NC}"
-    echo -e "${color}╰─────────────────────────────────────────────────────╯${NC}"
+    echo -e "${color}$title${NC}"
     echo
 }
 
@@ -166,13 +158,12 @@ check_prerequisites() {
     
     # Check if Azure CLI is installed
     if ! command -v az &> /dev/null; then
-        log "ERROR" "Azure CLI is not installed. Please install it first."
+        echo -e "${RED}Error: Azure CLI not installed${NC}" >&2
         exit 1
     fi
     
-    # Check if logged in to Azure
     if ! az account show &> /dev/null; then
-        log "ERROR" "Not logged in to Azure. Please run 'az login' first."
+        echo -e "${RED}Error: Not logged into Azure${NC}" >&2
         exit 1
     fi
     
@@ -518,7 +509,7 @@ log_vm() {
     echo "\$(date '+%Y-%m-%d %H:%M:%S') [\$1] \$2"
 }
 
-log_vm "INFO" "Removing ALL SSH keys from azroot account"
+log_vm "INFO" "Starting SSH key removal"
 
 # Check if authorized_keys exists
 if [[ ! -f "\$AUTHORIZED_KEYS" ]]; then
@@ -925,5 +916,4 @@ main() {
     fi
 }
 
-# Run main function with all arguments
 main "$@"
