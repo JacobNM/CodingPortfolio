@@ -150,7 +150,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 **CSV Requirements:**
 
 - Header row is required and must match exactly
-- Multiple VM names should be comma-separated without quotes
+- Multiple VM names should be comma-separated within a quoted field (for example: `"vm01,vm02,vm03"`)
 - Leave vm_names empty for auto-discovery of all VMs in the resource group
 - SSH keys can be file paths or direct key content
 - Direct key content should be quoted to handle spaces
@@ -273,7 +273,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 **CSV Requirements:**
 
 - Header row is required and must match exactly
-- Multiple VM names should be comma-separated and quoted
+- Multiple VM names should be comma-separated within a quoted field (for example: `"vm01,vm02,vm03"`)
 - Leave vm_names empty for auto-discovery of all VMs in the resource group
 - `ssh_public_key` is required and must contain a valid SSH public key
 - `backup_keys`: true/false - whether to backup authorized_keys before changes
