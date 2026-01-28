@@ -462,11 +462,16 @@ add_ssh_key_to_vm() {
     local temp_script=$(mktemp)
     trap "rm -f $temp_script" RETURN
     
+    # Base64-encode SSH public key to safely embed it in the generated script
+    local SSH_KEY_B64
+    SSH_KEY_B64="$(printf '%s' "$SSH_PUBLIC_KEY" | base64 | tr -d '\n')"
+    
     cat > "$temp_script" << EOF
 #!/bin/bash
 set -euo pipefail
 
-SSH_KEY="$SSH_PUBLIC_KEY"
+SSH_KEY_B64="$SSH_KEY_B64"
+SSH_KEY=\$(printf '%s' "\$SSH_KEY_B64" | base64 -d)
 AZROOT_HOME="/home/azroot"
 SSH_DIR="\$AZROOT_HOME/.ssh"
 AUTHORIZED_KEYS="\$SSH_DIR/authorized_keys"
