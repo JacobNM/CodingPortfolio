@@ -172,6 +172,12 @@ check_prerequisites() {
         echo -e "${RED}Error: Not logged into Azure${NC}" >&2
         exit 1
     fi
+
+    # Check if Python 3 is installed (required for CSV parsing)
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${RED}Error: python3 not installed (required for CSV parsing)${NC}" >&2
+        exit 1
+    fi
     
     log "SUCCESS" "Prerequisites check completed"
 }
