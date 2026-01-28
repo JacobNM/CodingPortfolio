@@ -558,10 +558,13 @@ validate_csv_file() {
     
     print_section "Validating CSV File"
     
-    # Expand tilde and resolve path
+    # Safely expand tilde in the path
     csv_file="${csv_file/#\~/$HOME}"
-    # Remove escaped characters and resolve the path
-    csv_file=$(eval echo "$csv_file")
+    
+    # Safely expand environment variables in the path, if envsubst is available  
+    if command -v envsubst >/dev/null 2>&1; then  
+        csv_file="$(printf '%s' "$csv_file" | envsubst)"  
+    fi
     
     # Update the global variable with the resolved path
     CSV_FILE="$csv_file"
