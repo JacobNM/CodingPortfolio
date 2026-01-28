@@ -50,14 +50,14 @@ Batch processing using CSV files containing multiple operations.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `-u <username>` | ✅* | Username for identification |
-| `-s <subscription_id>` | ✅* | Azure subscription ID |
-| `-k <ssh_public_key>` | ✅* | SSH public key file path or key content |
-| `-g <vm_resource_group>` | ✅* | Resource group containing VMs |
-| `-v <vm_name>` | ❌* | VM name (can be specified multiple times, or omit for auto-discovery) |
-| `-f <csv_file>` | ✅** | CSV file for batch operations |
-| `-d` | ❌ | Dry run mode (show what would be done) |
-| `-h` | ❌ | Display help message |
+| `-u, --username <username>` | ✅* | Username for identification |
+| `-s, --subscription <subscription_id>` | ✅* | Azure subscription ID |
+| `-k, --key <ssh_public_key>` | ✅* | SSH public key file path or key content |
+| `-g, --resource-group <vm_resource_group>` | ✅* | Resource group containing VMs |
+| `-v, --vm <vm_name>` | ❌* | VM name (can be specified multiple times, or omit for auto-discovery) |
+| `-f, --file <csv_file>` | ✅** | CSV file for batch operations |
+| `-d, --dry-run` | ❌ | Dry run mode (show what would be done) |
+| `-h, --help` | ❌ | Display help message |
 
 *Required for command line mode (except `-v` which enables auto-discovery when omitted)  
 **Required for CSV file mode (replaces command line parameters)
@@ -150,7 +150,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 **CSV Requirements:**
 
 - Header row is required and must match exactly
-- Multiple VM names should be comma-separated and quoted
+- Multiple VM names should be comma-separated without quotes
 - Leave vm_names empty for auto-discovery of all VMs in the resource group
 - SSH keys can be file paths or direct key content
 - Direct key content should be quoted to handle spaces
@@ -171,17 +171,17 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `-u <username>` | ✅* | Username for identification |
-| `-s <subscription_id>` | ✅* | Azure subscription ID |
-| `-g <vm_resource_group>` | ✅* | Resource group containing VMs |
-| `-v <vm_name>` | ✅* | VM name (can be specified multiple times) |
-| `-k <ssh_public_key>` | ✅* | SSH public key to remove (file path or key content) |
-| `-f <csv_file>` | ✅** | CSV file for batch operations |
-| `-n` | ❌ | No backup (skip backup of authorized_keys) |
-| `-d` | ❌ | Dry run mode (show what would be done) |
-| `-h` | ❌ | Display help message |
+| `-u, --username <username>` | ✅* | Username for identification |
+| `-s, --subscription <subscription_id>` | ✅* | Azure subscription ID |
+| `-k, --key <ssh_public_key>` | ✅* | SSH public key to remove (file path or key content) |
+| `-g, --resource-group <vm_resource_group>` | ✅* | Resource group containing VMs |
+| `-v, --vm <vm_name>` | ❌* | VM name (can be specified multiple times, or omit for auto-discovery) |
+| `-f, --file <csv_file>` | ✅** | CSV file for batch operations |
+| `-n, --no-backup` | ❌ | No backup (skip backup of authorized_keys) |
+| `-d, --dry-run` | ❌ | Dry run mode (show what would be done) |
+| `-h, --help` | ❌ | Display help message |
 
-*Required for command line mode  
+*Required for command line mode (except `-v` which enables auto-discovery when omitted)  
 **Required for CSV file mode (replaces command line parameters)
 
 ### Usage Examples
@@ -206,6 +206,17 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
   -k ~/.ssh/jane_key.pub \
   -g "production-vms-rg" \
   -v "web-server-01" -v "web-server-02" -v "db-server-01"
+```
+
+#### Remove specific key from all VMs in resource group (auto-discovery)
+
+```bash
+./azure_vm_ssh_offboarding.sh \
+  -u jane.smith \
+  -s "87654321-4321-4321-4321-210987654321" \
+  -k ~/.ssh/jane_key.pub \
+  -g "production-rg"
+  # No -v parameter = discovers all VMs automatically
 ```
 
 #### Remove specific key without backup
@@ -283,7 +294,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
    - **Directory Creation** - Ensures `/home/azroot/.ssh/` exists with correct permissions (700)
    - **Key Installation** - Adds SSH key to `authorized_keys` with proper permissions (600)
    - **Duplicate Prevention** - Checks if key already exists before adding
-   - **Operation Summary** - Provides detailed success/failure reporting
+   - **Operation Summary** - Provides success/failure reporting
 
 ### Offboarding Process
 
@@ -500,39 +511,18 @@ For detailed troubleshooting:
    ./azure_vm_ssh_onboarding.sh -f batch.csv -d
    ```
 
-3. **Verbose Azure CLI Output** - Enable detailed Azure CLI logging:
-
-   ```bash
-   export AZURE_CLI_DIAGNOSTICS_TELEMETRY=0
-   az config set core.only_show_errors=false
-   ```
-
-4. **Check Azure Permissions** - Verify required roles:
-
-   ```bash
-   az role assignment list --assignee $(az account show --query user.name -o tsv) --all
-   ```
-
-### Performance Optimization
-
-- **Parallel Processing** - Scripts process multiple VMs concurrently where possible
-- **Connection Reuse** - Single Azure CLI session for all operations
-- **Efficient Queries** - Minimal API calls to reduce execution time
-- **Batch Validation** - Pre-validates all inputs before processing begins
-
 ## Requirements
 
 - **Operating System**: Linux, macOS, or Windows with WSL/Git Bash
 - **Azure CLI**: Version 2.0 or higher
 - **Bash**: Version 4.0 or higher
-- **Network**: Internet connectivity to Azure endpoints
 - **Permissions**: VM Contributor or VM Administrator Login role
 
 ## Support
 
 For issues or questions:
 
-1. Check the generated log files for detailed error information
+1. Check the generated log files for error information
 2. Verify Azure permissions and VM status
 3. Ensure SSH key format is valid
 4. Test with dry run mode first
