@@ -22,7 +22,6 @@ DRY_RUN=false  # Controlled by command line only (-d flag), NOT from CSV file
 VM_RESOURCE_GROUP=""
 VM_NAMES=()
 SSH_PUBLIC_KEY=""
-REMOVE_ALL_KEYS=false
 BACKUP_KEYS=true
 CSV_FILE=""
 
@@ -95,7 +94,6 @@ Usage: $0 [COMMAND_LINE_OPTIONS | -f <csv_file>]
 
 **FUNCTIONALITY:**
 - Remove specific SSH public keys from Azure VMs (azroot account)
-- Remove all SSH keys from Azure VMs (azroot account)
 - Support for multiple VMs or auto-discovery of all VMs in resource group
 - Automatic backup of authorized_keys before modification
 - Import parameters from CSV file for batch operations
@@ -108,17 +106,16 @@ Required Parameters:
     -v, --vm <vm_name>                 VM name (can be specified multiple times)
 
 Optional Parameters:
-    -k, --key <ssh_public_key>         Specific SSH public key to remove (file path or key content)
-    -a, --remove-all                   Remove ALL SSH keys from azroot account
+    -k, --key <ssh_public_key>         SSH public key to remove (file path or key content)
     -n, --no-backup                   No backup (skip backup of authorized_keys)
     -d, --dry-run                      Dry run mode (show what would be done)
     -h, --help                         Display this help message
 
 **CSV FILE MODE:**
     -f, --file <csv_file>              CSV file containing offboarding parameters
-                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys
+                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,backup_keys
                            VM names can be comma-separated within quotes
-                           ssh_public_key can be empty if remove_all_keys is true
+                           ssh_public_key is required for key removal
                            Boolean values should be 'true' or 'false'
 
 Examples:
@@ -142,12 +139,12 @@ Examples:
     $0 --file offboarding_batch.csv --dry-run
 
 **CSV File Format Example (offboarding_batch.csv):**
-username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys
-john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true
-jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,backup_keys
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",true
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03,false
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",true
 # Empty vm_names field will auto-discover all VMs in the resource group:
-sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,false,true
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,true
 
 EOF
 }
@@ -217,13 +214,8 @@ validate_input() {
         :
     fi
     
-    if [[ "$REMOVE_ALL_KEYS" == "false" && -z "$SSH_PUBLIC_KEY" ]]; then
-        log "ERROR" "Either specify a specific SSH key (-k) or use -a to remove all keys"
-        exit 1
-    fi
-    
-    if [[ "$REMOVE_ALL_KEYS" == "true" && -n "$SSH_PUBLIC_KEY" ]]; then
-        log "ERROR" "Cannot specify both -k (specific key) and -a (all keys) options"
+    if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+        log "ERROR" "SSH public key is required for offboarding operations. Use -k option."
         exit 1
     fi
     
@@ -239,12 +231,8 @@ generate_summary() {
     echo -e "${BLUE}Resource Group:${NC} $VM_RESOURCE_GROUP"
     echo -e "${BLUE}VMs:${NC} ${VM_NAMES[*]}"
     
-    if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
-        echo -e "${BLUE}Operation:${NC} Remove ALL SSH keys"
-    else
-        echo -e "${BLUE}Operation:${NC} Remove specific SSH key"
-        echo -e "${BLUE}SSH Key:${NC} $(echo "$SSH_PUBLIC_KEY" | cut -c1-50)..."
-    fi
+    echo -e "${BLUE}Operation:${NC} Remove specific SSH key"
+    echo -e "${BLUE}SSH Key:${NC} $(echo "$SSH_PUBLIC_KEY" | cut -c1-50)..."
     
     echo -e "${BLUE}Backup Keys:${NC} $BACKUP_KEYS"
     echo -e "${BLUE}Dry Run:${NC} $DRY_RUN"
@@ -363,11 +351,7 @@ prompt_for_confirmation() {
     echo -e "${BLUE}User:${NC} $USER_NAME"
     echo -e "${BLUE}Subscription:${NC} $SUBSCRIPTION_ID"
     echo "═══════════════════════════════════════════════════════════════"
-    if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
-        echo -e "${YELLOW}This will REMOVE ALL SSH keys from the azroot account on the specified VMs.${NC}"
-    else
-        echo -e "${YELLOW}This will REMOVE the specified SSH key from the azroot account on the specified VMs.${NC}"
-    fi
+    echo -e "${YELLOW}This will REMOVE the specified SSH key from the azroot account on the specified VMs.${NC}"
     echo ""
     
     while true; do
@@ -444,9 +428,6 @@ remove_vm_ssh_access() {
     if [[ "$DRY_RUN" != "true" ]]; then
         local vm_list_str="$(IFS=', '; echo "${vm_names[*]}")"
         local operation_type="SSH Key Removal"
-        if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
-            operation_type="All SSH Keys Removal"
-        fi
         
         if ! prompt_for_confirmation "$operation_type" "${#vm_names[@]}" "$vm_list_str"; then
             log "INFO" "Operation cancelled by user"
@@ -460,13 +441,9 @@ remove_vm_ssh_access() {
         print_progress "$((++current_vm))" "${#vm_names[@]}" "Processing VM: $vm_name"
         
         if [[ "$DRY_RUN" == "true" ]]; then
-            if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
-                print_operation_status "SSH Key Removal: $vm_name" "skip" "Dry run mode - would remove ALL SSH keys from azroot account"
-                log "INFO" "DRY RUN: Would remove ALL SSH keys from $vm_name (azroot account)"
-            else
-                print_operation_status "SSH Key Removal: $vm_name" "skip" "Dry run mode - would remove specific SSH key from azroot account"
-                log "INFO" "DRY RUN: Would remove specific SSH key from $vm_name (azroot account)"
-            fi
+            print_operation_status "SSH Key Removal: $vm_name" "skip" "Dry run mode - would remove specific SSH key from azroot account"
+            log "INFO" "DRY RUN: Would remove specific SSH key from $vm_name (azroot account)"
+
         else
             # Check if VM exists and is running (only in non-dry-run mode)
             local vm_status=$(az vm get-instance-view --resource-group "$resource_group" --name "$vm_name" \
@@ -494,45 +471,9 @@ remove_ssh_keys_from_vm() {
     local temp_script=$(mktemp)
     trap "rm -f $temp_script" RETURN
     
-    if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
-        # Script to remove ALL SSH keys
-        cat > "$temp_script" << EOF
-#!/bin/bash
-set -euo pipefail
-
-AZROOT_HOME="/home/azroot"
-SSH_DIR="\$AZROOT_HOME/.ssh"
-AUTHORIZED_KEYS="\$SSH_DIR/authorized_keys"
-
-# Function to log with timestamp
-log_vm() {
-    echo "\$(date '+%Y-%m-%d %H:%M:%S') [\$1] \$2"
-}
-
-log_vm "INFO" "Starting SSH key removal"
-
-# Check if authorized_keys exists
-if [[ ! -f "\$AUTHORIZED_KEYS" ]]; then
-    log_vm "INFO" "No authorized_keys file found, nothing to remove"
-    exit 0
-fi
-
-# Backup authorized_keys before modification (if backup enabled)
-if [[ "$BACKUP_KEYS" == "true" ]]; then
-    cp "\$AUTHORIZED_KEYS" "\$AUTHORIZED_KEYS.backup.\$(date +%Y%m%d_%H%M%S)"
-    log_vm "INFO" "Backed up authorized_keys file"
-fi
-
-# Clear the authorized_keys file (remove all SSH keys)
-> "\$AUTHORIZED_KEYS"
-chown azroot:azroot "\$AUTHORIZED_KEYS"
-chmod 600 "\$AUTHORIZED_KEYS"
-
-log_vm "SUCCESS" "Cleared all SSH keys from azroot authorized_keys"
-EOF
-    else
-        # Script to remove specific SSH key
-        cat > "$temp_script" << EOF
+    # Create script to remove specific SSH key
+    # Create script to remove specific SSH key
+    cat > "$temp_script" << EOF
 #!/bin/bash
 set -euo pipefail
 
@@ -571,13 +512,8 @@ else
     log_vm "INFO" "SSH key not found in authorized_keys, nothing to remove"
 fi
 EOF
-    fi
     
-    if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
-        print_operation_status "SSH Key Removal: $vm_name" "start" "Removing ALL keys from azroot account"
-    else
-        print_operation_status "SSH Key Removal: $vm_name" "start" "Removing specific key from azroot account"
-    fi
+    print_operation_status "SSH Key Removal: $vm_name" "start" "Removing specific key from azroot account"
     
     # Execute the script on the VM
     local run_result=$(az vm run-command invoke \
@@ -588,15 +524,11 @@ EOF
         --output json 2>&1)
     
     if [[ $? -eq 0 ]]; then
-        print_operation_status "SSH Key Removal: $vm_name" "success" "SSH keys removed from azroot account"
-        if [[ "$REMOVE_ALL_KEYS" == "true" ]]; then
-            log "SUCCESS" "Removed ALL SSH keys from $vm_name (azroot account)"
-        else
-            log "SUCCESS" "Removed specific SSH key from $vm_name (azroot account)"
-        fi
+        print_operation_status "SSH Key Removal: $vm_name" "success" "SSH key removed from azroot account"
+        log "SUCCESS" "Removed specific SSH key from $vm_name (azroot account)"
     else
-        print_operation_status "SSH Key Removal: $vm_name" "error" "Failed to remove SSH keys"
-        log "ERROR" "Failed to remove SSH keys from $vm_name: $run_result"
+        print_operation_status "SSH Key Removal: $vm_name" "error" "Failed to remove SSH key"
+        log "ERROR" "Failed to remove SSH key from $vm_name: $run_result"
     fi
 }
 
@@ -698,8 +630,7 @@ for row in reader:
         csv_ssh_key="${field_array[2]:-}"
         csv_resource_group="${field_array[3]:-}"
         csv_vm_names="${field_array[4]:-}"
-        csv_remove_all="${field_array[5]:-}"
-        csv_backup="${field_array[6]:-}"
+        csv_backup="${field_array[5]:-}"
         
         # Skip rows with empty essential fields
         if [[ -z "$csv_username" && -z "$csv_subscription" && -z "$csv_resource_group" ]]; then
@@ -727,13 +658,6 @@ for row in reader:
             done
         else
             VM_NAMES=()
-        fi
-        
-        # Set remove all keys mode
-        if [[ "$csv_remove_all" =~ ^[Tt][Rr][Uu][Ee]$ ]]; then
-            REMOVE_ALL_KEYS=true
-        else
-            REMOVE_ALL_KEYS=false
         fi
         
         # Set backup mode
@@ -783,7 +707,8 @@ process_single_operation() {
     fi
     
     # Validate SSH key for current operation (only if not removing all keys and SSH key is provided)
-    if [[ "$REMOVE_ALL_KEYS" == "false" && -n "$SSH_PUBLIC_KEY" ]]; then
+    # Validate SSH key if provided
+    if [[ -n "$SSH_PUBLIC_KEY" ]]; then
         if ! validate_ssh_key "$SSH_PUBLIC_KEY"; then
             return 1
         fi
@@ -829,9 +754,9 @@ validate_input_for_row() {
         :
     fi
     
-    # Check that either SSH key is provided or remove_all_keys is true
-    if [[ "$REMOVE_ALL_KEYS" == "false" && -z "$SSH_PUBLIC_KEY" ]]; then
-        log "ERROR" "SSH public key is required when remove_all_keys is false (CSV column: ssh_public_key)"
+    # Check that SSH key is provided
+    if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+        log "ERROR" "SSH public key is required (CSV column: ssh_public_key)"
         validation_failed=true
     fi
     
@@ -873,10 +798,6 @@ main() {
             -f|--file)
                 CSV_FILE="$2"
                 shift 2
-                ;;
-            -a|--remove-all)
-                REMOVE_ALL_KEYS=true
-                shift
                 ;;
             -n|--no-backup)
                 BACKUP_KEYS=false
