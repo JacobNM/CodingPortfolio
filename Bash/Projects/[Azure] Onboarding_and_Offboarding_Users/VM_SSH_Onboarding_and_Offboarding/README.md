@@ -10,7 +10,7 @@ Adds SSH public keys to the `azroot` account on specified Azure VMs, enabling se
 
 ### 🗑️ `azure_vm_ssh_offboarding.sh`  
 
-Removes SSH public keys from the `azroot` account on specified Azure VMs, revoking SSH access for users. When no specific VM names are provided, the script automatically discovers and processes all VMs in the specified resource group.
+Removes specific SSH public keys from the `azroot` account on specified Azure VMs, revoking SSH access for users. When no specific VM names are provided, the script automatically discovers and processes all VMs in the specified resource group.
 
 ## Prerequisites
 
@@ -175,14 +175,13 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 | `-s <subscription_id>` | ✅* | Azure subscription ID |
 | `-g <vm_resource_group>` | ✅* | Resource group containing VMs |
 | `-v <vm_name>` | ✅* | VM name (can be specified multiple times) |
-| `-k <ssh_public_key>` | ❌* | Specific SSH public key to remove (file path or key content) |
-| `-a` | ❌* | Remove ALL SSH keys from azroot account |
+| `-k <ssh_public_key>` | ✅* | SSH public key to remove (file path or key content) |
 | `-f <csv_file>` | ✅** | CSV file for batch operations |
 | `-n` | ❌ | No backup (skip backup of authorized_keys) |
 | `-d` | ❌ | Dry run mode (show what would be done) |
 | `-h` | ❌ | Display help message |
 
-*Required for command line mode (must specify either `-k` or `-a`)  
+*Required for command line mode  
 **Required for CSV file mode (replaces command line parameters)
 
 ### Usage Examples
@@ -198,15 +197,15 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
   -v "web-server-01"
 ```
 
-#### Remove ALL SSH keys from multiple VMs
+#### Remove specific key from multiple VMs
 
 ```bash
 ./azure_vm_ssh_offboarding.sh \
   -u jane.smith \
   -s "12345678-1234-1234-1234-123456789012" \
+  -k ~/.ssh/jane_key.pub \
   -g "production-vms-rg" \
-  -v "web-server-01" -v "web-server-02" -v "db-server-01" \
-  -a
+  -v "web-server-01" -v "web-server-02" -v "db-server-01"
 ```
 
 #### Remove specific key without backup
@@ -252,12 +251,12 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 Create a CSV file with the following header and format:
 
 ```csv
-username,subscription_id,ssh_public_key,vm_resource_group,vm_names,remove_all_keys,backup_keys
-john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",false,true
-jane.smith,87654321-4321-4321-4321-210987654321,,test-rg,vm03,true,false
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",false,true
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,backup_keys
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",true
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03,false
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm04,vm05",true
 # Empty vm_names field enables auto-discovery of all VMs in the resource group:
-sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,false,true
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,true
 ```
 
 **CSV Requirements:**
@@ -265,8 +264,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 - Header row is required and must match exactly
 - Multiple VM names should be comma-separated and quoted
 - Leave vm_names empty for auto-discovery of all VMs in the resource group
-- `ssh_public_key` can be empty if `remove_all_keys` is true
-- `remove_all_keys`: true/false - whether to remove all SSH keys
+- `ssh_public_key` is required and must contain a valid SSH public key
 - `backup_keys`: true/false - whether to backup authorized_keys before changes
 - Direct key content should be quoted to handle spaces
 
