@@ -36,6 +36,15 @@ log() {
     echo -e "${timestamp} [${level}] ${message}" | tee -a "$LOG_FILE"
 }
 
+# Log-only function (writes only to log file, not terminal)
+log_only() {
+    local level=$1
+    shift
+    local message="$*"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo -e "${timestamp} [${level}] ${message}" >> "$LOG_FILE"
+}
+
 # Print section header with visual separator
 print_section() {
     local title="$1"
@@ -286,12 +295,9 @@ discover_vms_in_resource_group() {
     local subscription_id="$1"
     local resource_group="$2"
     
+    # In dry-run mode, we still want to discover actual VMs, just not modify them
     if [[ "$DRY_RUN" == "true" ]]; then
-        # For dry run, return some example VM names (one per line)
-        echo "example-vm1"
-        echo "example-vm2" 
-        echo "example-vm3"
-        return 0
+        log_only "INFO" "DRY RUN: Discovering VMs in resource group '$resource_group'" >&2
     fi
     
     # Verify subscription is set correctly
@@ -418,6 +424,10 @@ remove_vm_ssh_access() {
                 log "ERROR" "No valid VM names found after filtering"
                 return 1
             fi
+            
+            # Update global VM_NAMES array for summary display
+            VM_NAMES=("${vm_names[@]}")
+            log "INFO" "Auto-discovered ${#vm_names[@]} VM(s): $(IFS=', '; echo "${vm_names[*]}")"
         else
             log "ERROR" "Failed to discover VMs in resource group '$resource_group'"
             return 1
@@ -442,7 +452,7 @@ remove_vm_ssh_access() {
         
         if [[ "$DRY_RUN" == "true" ]]; then
             print_operation_status "SSH Key Removal: $vm_name" "skip" "Dry run mode - would remove specific SSH key from azroot account"
-            log "INFO" "DRY RUN: Would remove specific SSH key from $vm_name (azroot account)"
+            log_only "INFO" "DRY RUN: Would remove specific SSH key from $vm_name (azroot account)"
 
         else
             # Check if VM exists and is running (only in non-dry-run mode)
