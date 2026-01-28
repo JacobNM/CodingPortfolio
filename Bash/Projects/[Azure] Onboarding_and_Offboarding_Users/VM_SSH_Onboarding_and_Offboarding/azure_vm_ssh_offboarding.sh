@@ -132,7 +132,7 @@ Examples:
     $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
        -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
 
-    # Command line mode - Remove ALL SSH keys from multiple VMs (long options)
+    # Command line mode - Remove specific SSH key from multiple VMs (long options)
     $0 --username jane.smith --subscription "12345678-1234-1234-1234-123456789012" \\
        --resource-group "myvm-rg" --vm "vm01" --vm "vm02" --vm "vm03" --remove-all
 
@@ -168,6 +168,7 @@ check_prerequisites() {
         exit 1
     fi
     
+    # Check if logged into Azure
     if ! az account show &> /dev/null; then
         echo -e "${RED}Error: Not logged into Azure${NC}" >&2
         exit 1
