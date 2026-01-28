@@ -134,8 +134,7 @@ Examples:
 
     # Command line mode - Remove specific SSH key from multiple VMs (long options)
     $0 --username jane.smith --subscription "12345678-1234-1234-1234-123456789012" \\
-       --resource-group "myvm-rg" --vm "vm01" --vm "vm02" --vm "vm03" --remove-all
-
+       --key ~/.ssh/jane_key.pub --resource-group "myvm-rg" --vm "vm01" --vm "vm02" --vm "vm03"
     # Command line mode - Dry run mode (mixed options)
     $0 -u john.doe --subscription "12345678-1234-1234-1234-123456789012" \\
        --key ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" --dry-run
