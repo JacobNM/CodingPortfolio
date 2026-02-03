@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Azure VM SSH Key Onboarding Script
 # Automates adding SSH keys to Azure VMs (azroot account)
 
@@ -521,28 +521,116 @@ interactive_get_resource_group() {
         exit 1
     fi
     
-    # Display resource groups
-    echo -e "\n${BLUE}Available Resource Groups:${NC}"
+    # Filter resource groups to only show those with VMs using Azure Resource Graph
+    log "INFO" "Fetching VMs across all resource groups (single API call)..."
+    echo -e "${BLUE}Finding resource groups with VMs...${NC}"
+    
+    # Use Azure Resource Graph to get all VMs and their resource groups in one query
+    local vm_by_rg_json
+    vm_by_rg_json=$(az graph query -q "Resources | where type == 'microsoft.compute/virtualmachines' | where subscriptionId == '$SUBSCRIPTION_ID' | summarize VMCount=count() by resourceGroup | project resourceGroup, VMCount" --output json 2>/dev/null) || {
+        log "WARNING" "Azure Resource Graph query failed, falling back to individual resource group checks..."
+        echo -e "${YELLOW}Resource Graph not available, using slower method...${NC}"
+        
+        # Fallback to the individual API call method
+        local resource_groups_with_vms=()
+        local total_rgs=$(echo "$resource_groups_json" | jq 'length')
+        local current_rg=0
+        
+        while IFS= read -r line; do
+            local rg_name=$(echo "$line" | jq -r '.name')
+            local rg_location=$(echo "$line" | jq -r '.location')
+            
+            ((current_rg++))
+            echo -n -e "\r${BLUE}Checking resource group $current_rg of $total_rgs: $rg_name${NC}"
+            
+            # Check if this resource group has any VMs
+            local vm_count
+            vm_count=$(az vm list --resource-group "$rg_name" --subscription "$SUBSCRIPTION_ID" --query 'length(@)' --output tsv 2>/dev/null) || vm_count=0
+            
+            if [[ "$vm_count" -gt 0 ]]; then
+                resource_groups_with_vms+=("$rg_name|$rg_location|$vm_count")
+            fi
+        done < <(echo "$resource_groups_json" | jq -c '.[]')
+        
+        echo -e "\n" # Clear the progress line
+    }
+    
+    # Process Resource Graph results if successful
+    if [[ -n "$vm_by_rg_json" ]] && [[ "$vm_by_rg_json" != "null" ]]; then
+        local resource_groups_with_vms=()
+        
+        # Debug: Check the structure of the returned JSON
+        log_only "DEBUG" "Azure Resource Graph response: $vm_by_rg_json"
+        
+        # Build lookup for resource group locations
+        declare -A rg_locations
+        while IFS= read -r line; do
+            local rg_name=$(echo "$line" | jq -r '.name')
+            local rg_location=$(echo "$line" | jq -r '.location')
+            if [[ -n "$rg_name" ]] && [[ "$rg_name" != "null" ]]; then
+                rg_locations["$rg_name"]="$rg_location"
+            fi
+        done < <(echo "$resource_groups_json" | jq -c '.[]')
+        
+        # Process VM counts by resource group
+        while IFS= read -r line; do
+            local rg_name=$(echo "$line" | jq -r '.resourceGroup')
+            local vm_count=$(echo "$line" | jq -r '.VMCount')
+            
+            # Safely access associative array with validation
+            local rg_location="Unknown"
+            if [[ -n "$rg_name" ]] && [[ "$rg_name" != "null" ]] && [[ ${rg_locations[$rg_name]+_} ]]; then
+                rg_location="${rg_locations[$rg_name]}"
+            fi
+            
+            resource_groups_with_vms+=("$rg_name|$rg_location|$vm_count")
+        done < <(echo "$vm_by_rg_json" | jq -c '.data[]')
+    fi
+    
+    # Check if any resource groups with VMs were found
+    if [[ ${#resource_groups_with_vms[@]} -eq 0 ]]; then
+        log "WARNING" "No resource groups with VMs found in subscription: $SUBSCRIPTION_ID"
+        echo -e "${YELLOW}No resource groups containing VMs were found.${NC}"
+        echo -n -e "${BLUE}Do you want to enter a resource group name manually? (y/n): ${NC}"
+        read -r continue_choice
+        if [[ "$continue_choice" != "y" && "$continue_choice" != "Y" ]]; then
+            log "INFO" "Operation cancelled by user"
+            exit 0
+        else
+            echo -n -e "${BLUE}Enter resource group name: ${NC}"
+            read -r VM_RESOURCE_GROUP
+            if [[ -n "$VM_RESOURCE_GROUP" ]]; then
+                log "INFO" "Custom resource group entered: $VM_RESOURCE_GROUP"
+                return 0
+            else
+                echo -e "${RED}Resource group name cannot be empty.${NC}"
+                exit 1
+            fi
+        fi
+    fi
+    
+    # Display resource groups with VMs
+    echo -e "${BLUE}Available Resource Groups (containing VMs):${NC}"
     echo "────────────────────────────────────────────────────────────────"
     
     local resource_group_names=()
     local counter=1
     
-    while IFS= read -r line; do
-        local rg_name=$(echo "$line" | jq -r '.name')
-        local rg_location=$(echo "$line" | jq -r '.location')
-        
+    for rg_info in "${resource_groups_with_vms[@]}"; do
+        IFS='|' read -r rg_name rg_location vm_count <<< "$rg_info"
         resource_group_names+=("$rg_name")
         
-        echo -e "$(printf "%2d" "$counter")) $rg_name"
+        echo -e "$(printf "%2d" "$counter")) ${GREEN}$rg_name${NC}"
         echo "     Location: $rg_location"
+        echo "     VMs: $vm_count"
         echo
         
         ((counter++))
-    done < <(echo "$resource_groups_json" | jq -c '.[]')
+    done
     
     # Add option to enter custom resource group
-    echo -e "${counter}) ${YELLOW}Enter custom resource group name${NC}\n"
+    echo -e "${counter}) ${YELLOW}Enter custom resource group name${NC}"
+    echo
     
     # Prompt for selection
     while true; do
