@@ -656,78 +656,89 @@ interactive_get_resource_group() {
 
 # Interactive function to get VM names
 interactive_get_vm_names() {
-    print_section "Virtual Machine Selection" "$GREEN"
-    echo "Retrieving VMs from resource group: $VM_RESOURCE_GROUP"
-    echo
+    print_section "Select Virtual Machines"
     
-    # Discover VMs in resource group
-    local vm_info_output
-    if ! vm_info_output=$(az vm list --resource-group "$VM_RESOURCE_GROUP" --query "[].{Name:name, PowerState:powerState, Location:location}" --output table 2>/dev/null); then
-        echo -e "${RED}❌ Error: Failed to retrieve VMs from resource group${NC}"
+    log "INFO" "Fetching VMs in resource group: $VM_RESOURCE_GROUP"
+    
+    # Get VMs in the resource group (we already know VMs exist from the filtering)
+    local vms_json
+    vms_json=$(az vm list --resource-group "$VM_RESOURCE_GROUP" --subscription "$SUBSCRIPTION_ID" --output json 2>/dev/null) || {
+        log "ERROR" "Failed to list VMs in resource group: $VM_RESOURCE_GROUP"
         exit 1
-    fi
+    }
     
-    if [[ -z "$vm_info_output" ]] || [[ "$vm_info_output" == *"[]"* ]]; then
-        echo -e "${YELLOW}⚠️  No VMs found in resource group: $VM_RESOURCE_GROUP${NC}"
-        echo "Please verify the resource group name contains VMs."
-        exit 1
-    fi
+    # Display VMs
+    echo -e "\n${BLUE}Available Virtual Machines:${NC}"
+    echo "────────────────────────────────────────────────────────────────"
     
-    echo "Available VMs in resource group '$VM_RESOURCE_GROUP':"
-    echo "$vm_info_output"
-    echo
+    local vm_names_list=()
+    local counter=1
     
-    # Get VM names for validation
-    local available_vm_names
-    if ! available_vm_names=$(az vm list --resource-group "$VM_RESOURCE_GROUP" --query "[].name" --output tsv 2>/dev/null); then
-        echo -e "${RED}❌ Error: Failed to retrieve VM names${NC}"
-        exit 1
-    fi
-    
-    echo "Select VMs to remove SSH access from:"
-    echo "Options:"
-    echo "  • Enter VM names separated by spaces (e.g., vm1 vm2 vm3)"
-    echo "  • Press Enter to select ALL VMs in this resource group"
-    echo "  • Type 'list' to see available VMs again"
-    echo
-    
-    while [[ ${#VM_NAMES[@]} -eq 0 ]]; do
-        read -r -p "Enter VM names (or press Enter for all VMs): " vm_input
+    while IFS= read -r line; do
+        local vm_name=$(echo "$line" | jq -r '.name')
+        local vm_size=$(echo "$line" | jq -r '.hardwareProfile.vmSize')
+        local vm_state=$(echo "$line" | jq -r '.provisioningState // "Unknown"')
         
-        if [[ -z "$vm_input" ]]; then
+        vm_names_list+=("$vm_name")
+        
+        echo -e "$(printf "%2d" "$counter")) $vm_name"
+        echo "     Size: $vm_size, State: $vm_state"
+        echo
+        
+        ((counter++))
+    done < <(echo "$vms_json" | jq -c '.[]')
+    
+    # Add options for all VMs or custom selection
+    echo -e "${counter}) ${GREEN}Select ALL VMs in resource group${NC}"
+    echo -e "$((counter+1))) ${YELLOW}Enter custom VM names${NC}\n"
+    
+    # Prompt for selection
+    echo -e "${BLUE}You can select multiple VMs by entering numbers separated by commas (e.g., 1,3,5)${NC}"
+    while true; do
+        echo -n -e "${BLUE}Select VMs (1-$((counter+1))) or 'all' for all VMs: ${NC}"
+        read -r selection
+        
+        if [[ "$selection" == "all" || "$selection" == "$counter" ]]; then
             # Select all VMs
-            readarray -t VM_NAMES <<< "$available_vm_names"
-            echo -e "${GREEN}✅ Selected ALL VMs (${#VM_NAMES[@]} VMs)${NC}"
+            VM_NAMES=("${vm_names_list[@]}")
+            log "INFO" "Selected all VMs: ${VM_NAMES[*]}"
             break
-        elif [[ "$vm_input" == "list" ]]; then
-            echo "$vm_info_output"
-            echo
-            continue
+        elif [[ "$selection" == "$((counter+1))" ]]; then
+            # Custom VM names
+            echo -n -e "${BLUE}Enter VM names separated by commas: ${NC}"
+            read -r custom_vms
+            IFS=',' read -ra VM_NAMES <<< "$custom_vms"
+            # Trim whitespace
+            for i in "${!VM_NAMES[@]}"; do
+                VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
+            done
+            log "INFO" "Custom VMs entered: ${VM_NAMES[*]}"
+            break
         else
-            # Parse space-separated VM names
-            read -ra input_vms <<< "$vm_input"
-            local valid_vms=()
-            local invalid_vms=()
+            # Parse comma-separated selections
+            IFS=',' read -ra selections <<< "$selection"
+            local valid_selection=true
+            VM_NAMES=()
             
-            for vm in "${input_vms[@]}"; do
-                if echo "$available_vm_names" | grep -q "^${vm}$"; then
-                    valid_vms+=("$vm")
+            for sel in "${selections[@]}"; do
+                sel=$(echo "$sel" | xargs)  # Trim whitespace
+                if [[ "$sel" =~ ^[0-9]+$ ]] && [[ "$sel" -ge 1 ]] && [[ "$sel" -lt "$counter" ]]; then
+                    VM_NAMES+=("${vm_names_list[$((sel-1))]}")
                 else
-                    invalid_vms+=("$vm")
+                    echo -e "${RED}Invalid selection: $sel${NC}"
+                    valid_selection=false
+                    break
                 fi
             done
             
-            if [[ ${#invalid_vms[@]} -gt 0 ]]; then
-                echo -e "${RED}❌ Invalid VM names: ${invalid_vms[*]}${NC}"
-                echo "Available VMs: $(echo "$available_vm_names" | tr '\n' ' ')"
-            else
-                VM_NAMES=("${valid_vms[@]}")
-                echo -e "${GREEN}✅ Selected ${#VM_NAMES[@]} VMs: ${VM_NAMES[*]}${NC}"
+            if [[ "$valid_selection" == "true" && ${#VM_NAMES[@]} -gt 0 ]]; then
+                log "INFO" "Selected VMs: ${VM_NAMES[*]}"
                 break
+            elif [[ "$valid_selection" == "true" ]]; then
+                echo -e "${RED}No valid VMs selected. Please try again.${NC}"
             fi
         fi
     done
-    echo
 }
 
 # Interactive function to confirm backup keys
