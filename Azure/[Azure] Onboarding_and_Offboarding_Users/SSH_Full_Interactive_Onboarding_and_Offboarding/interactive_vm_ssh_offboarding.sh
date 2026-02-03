@@ -1315,7 +1315,8 @@ main() {
         echo -e "${BLUE}Dry Run Mode:${NC} $DRY_RUN"
         echo
         
-        if ! prompt_for_confirmation; then
+        local vm_list_str="$(IFS=', '; echo "${VM_NAMES[*]}")"
+        if ! prompt_for_confirmation "SSH Key Removal" "${#VM_NAMES[@]}" "$vm_list_str"; then
             echo -e "${YELLOW}⚠️  Operation cancelled by user${NC}"
             exit 0
         fi
