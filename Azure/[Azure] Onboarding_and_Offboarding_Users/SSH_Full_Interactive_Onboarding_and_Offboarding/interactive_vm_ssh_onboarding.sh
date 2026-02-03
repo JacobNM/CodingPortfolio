@@ -413,12 +413,13 @@ interactive_get_subscription() {
         subscription_ids+=("$sub_id")
         
         if [[ "$is_default" == "true" ]]; then
-            printf "%2d) %s\n" "$counter" "${GREEN}$sub_name${NC} (${YELLOW}Default${NC})"
+            echo -e "$(printf "%2d)" "$counter") ${GREEN}$sub_name${NC} (${YELLOW}Default${NC})"
         else
-            printf "%2d) %s\n" "$counter" "$sub_name"
+            echo -e "$(printf "%2d)" "$counter") $sub_name"
         fi
-        printf "     ID: %s\n" "$sub_id"
-        printf "     State: %s\n\n" "$state"
+        echo "     ID: $sub_id"
+        echo "     State: $state"
+        echo
         
         ((counter++))
     done < <(echo "$subscriptions_json" | jq -c '.[]')
@@ -533,8 +534,9 @@ interactive_get_resource_group() {
         
         resource_group_names+=("$rg_name")
         
-        printf "%2d) %s\n" "$counter" "$rg_name"
-        printf "     Location: %s\n\n" "$rg_location"
+        echo -e "$(printf "%2d" "$counter")) $rg_name"
+        echo "     Location: $rg_location"
+        echo
         
         ((counter++))
     done < <(echo "$resource_groups_json" | jq -c '.[]')
@@ -610,8 +612,9 @@ interactive_get_vm_names() {
         
         vm_names_list+=("$vm_name")
         
-        printf "%2d) %s\n" "$counter" "$vm_name"
-        printf "     Size: %s, State: %s\n\n" "$vm_size" "$vm_state"
+        echo -e "$(printf "%2d" "$counter")) $vm_name"
+        echo "     Size: $vm_size, State: $vm_state"
+        echo
         
         ((counter++))
     done < <(echo "$vms_json" | jq -c '.[]')
