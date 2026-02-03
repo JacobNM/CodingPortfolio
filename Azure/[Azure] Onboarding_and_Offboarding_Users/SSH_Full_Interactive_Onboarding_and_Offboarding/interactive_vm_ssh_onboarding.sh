@@ -234,7 +234,8 @@ validate_input() {
     fi
     
     # VM names are optional - if empty, we'll discover all VMs in the resource group
-    if [[ ${#VM_NAMES[@]:-0} -eq 0 ]]; then
+    local vm_count=${#VM_NAMES[@]}
+    if [[ $vm_count -eq 0 ]]; then
         log "INFO" "No VM names specified - will discover all VMs in resource group '$VM_RESOURCE_GROUP'"
     fi
     
@@ -269,8 +270,14 @@ validate_ssh_key() {
     local key_input="$1"
     local key_content=""
     
+    # Expand tilde in file paths
+    local expanded_path="${key_input/#\~/$HOME}"
+    
     # Check if it's a file path
-    if [[ -f "$key_input" ]]; then
+    if [[ -f "$expanded_path" ]]; then
+        log "INFO" "Reading SSH key from file: $expanded_path"
+        key_content=$(cat "$expanded_path")
+    elif [[ -f "$key_input" ]]; then
         log "INFO" "Reading SSH key from file: $key_input"
         key_content=$(cat "$key_input")
     else
