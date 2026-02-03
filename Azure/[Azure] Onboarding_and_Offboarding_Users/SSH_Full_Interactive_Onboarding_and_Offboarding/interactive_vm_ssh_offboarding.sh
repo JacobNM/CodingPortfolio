@@ -106,46 +106,54 @@ Usage: $0 [COMMAND_LINE_OPTIONS | -f <csv_file>]
 - Support for multiple VMs or auto-discovery of all VMs in resource group
 - Automatic backup of authorized_keys before modification
 - Import parameters from CSV file for batch operations
+- **FULLY INTERACTIVE MODE:** Run without parameters for guided setup
+
+**INTERACTIVE MODE:**
+Run the script without any parameters to be guided through:
+- Azure subscription selection from available subscriptions
+- Resource group selection from subscription (filtered to show only groups with VMs)
+- VM selection from resource group (with multi-select support)
+- SSH key configuration (file path, direct input, or default)
+- Backup keys confirmation
+- Dry-run mode selection
 
 **COMMAND LINE MODE:**
-Required Parameters:
-    -u, --username <username>           Username for identification
-    -s, --subscription <subscription_id> Azure subscription ID
-    -g, --resource-group <vm_resource_group> Resource group containing VMs
-    -v, --vm <vm_name>                 VM name (can be specified multiple times)
+Required Parameters (if not provided, interactive prompts will appear):
+    -u, --username <username>       Username for identification
+    -s, --subscription <id>         Azure subscription ID
+    -k, --key <public_key>          SSH public key to remove (file path or key string)
+    -g, --resource-group <name>     VM resource group name
 
 Optional Parameters:
-    -k, --key <ssh_public_key>         SSH public key to remove (file path or key content)
-    -n, --no-backup                   No backup (skip backup of authorized_keys)
-    -d, --dry-run                      Dry run mode (show what would be done)
-    -h, --help                         Display this help message
+    -v, --vm <name>                 VM name (can be used multiple times for multiple VMs)
+                                   If not specified, will discover all VMs in resource group
+    -n, --no-backup                Skip backing up authorized_keys before modification
+    -d, --dry-run                  Preview operations without making changes
+    -f, --file <csv_file>          Process multiple users from CSV file
+    -h, --help                     Display this help message
 
 **CSV FILE MODE:**
-    -f, --file <csv_file>              CSV file containing offboarding parameters
-                           Format: username,subscription_id,ssh_public_key,vm_resource_group,vm_names,backup_keys
-                           VM names can be comma-separated within quotes
-                           ssh_public_key is required for key removal
-                           Boolean values should be 'true' or 'false'
-
 Examples:
-    # Command line mode - Remove specific SSH key from single VM (short options)
-    $0 -u john.doe -s "12345678-1234-1234-1234-123456789012" \\
-       -k ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01"
-
-    # Command line mode - Remove specific SSH key from multiple VMs (long options)
-    $0 --username jane.smith --subscription "12345678-1234-1234-1234-123456789012" \\
-       --key ~/.ssh/jane_key.pub --resource-group "myvm-rg" --vm "vm01" --vm "vm02" --vm "vm03"
-
-    # Command line mode - Dry run mode (mixed options)
-    $0 -u john.doe --subscription "12345678-1234-1234-1234-123456789012" \\
-       --key ~/.ssh/id_rsa.pub -g "myvm-rg" -v "myvm01" --dry-run
-
-    # Command line mode - Remove specific key without backup (long options)
-    $0 --username john.doe --subscription "12345678-1234-1234-1234-123456789012" \\
-       --key ~/.ssh/id_rsa.pub --resource-group "myvm-rg" --vm "myvm01" --no-backup
-
-    # CSV file mode - Batch processing
-    $0 --file offboarding_batch.csv --dry-run
+    # Interactive mode (recommended for first-time users)
+    $0
+    
+    # Process single CSV file
+    $0 -f offboarding_batch.csv
+    
+    # Process CSV file with dry-run
+    $0 -f offboarding_batch.csv -d
+    
+    # Command line mode
+    $0 -u john.doe -s 12345678-1234-1234-1234-123456789012 \\
+       -k ~/.ssh/id_rsa.pub -g prod-rg -v vm01 -v vm02
+    
+    # Auto-discover all VMs in resource group
+    $0 -u jane.smith -s 87654321-4321-4321-4321-210987654321 \\
+       -k ~/.ssh/jane_key.pub -g staging-rg
+    
+    # Dry-run mode
+    $0 -u test.user -s 11111111-2222-3333-4444-555555555555 \\
+       -k "ssh-rsa AAAAB3Nz..." -g test-rg -d
 
 **CSV File Format Example (offboarding_batch.csv):**
 username,subscription_id,ssh_public_key,vm_resource_group,vm_names,backup_keys
@@ -383,6 +391,399 @@ prompt_for_confirmation() {
                 ;;
         esac
     done
+}
+
+# Interactive function to get subscription ID
+interactive_get_subscription() {
+    print_section "Select Azure Subscription"
+    
+    log "INFO" "Fetching available subscriptions..."
+    
+    # Get subscriptions and format them for display
+    local subscriptions_json
+    subscriptions_json=$(az account list --output json 2>/dev/null) || {
+        log "ERROR" "Failed to list Azure subscriptions. Please ensure you are logged in with 'az login'"
+        exit 1
+    }
+    
+    # Check if any subscriptions are available
+    if [[ $(echo "$subscriptions_json" | jq 'length') -eq 0 ]]; then
+        log "ERROR" "No subscriptions found. Please check your Azure access."
+        exit 1
+    fi
+    
+    # Display subscriptions
+    echo -e "\n${BLUE}Available Subscriptions:${NC}"
+    echo "────────────────────────────────────────────────────────────────"
+    
+    local subscription_ids=()
+    local counter=1
+    
+    while IFS= read -r line; do
+        local sub_id=$(echo "$line" | jq -r '.id')
+        local sub_name=$(echo "$line" | jq -r '.name')
+        local is_default=$(echo "$line" | jq -r '.isDefault')
+        local state=$(echo "$line" | jq -r '.state')
+        
+        subscription_ids+=("$sub_id")
+        
+        if [[ "$is_default" == "true" ]]; then
+            echo -e "$(printf "%2d)" "$counter") ${GREEN}$sub_name${NC} (${YELLOW}Default${NC})"
+        else
+            echo -e "$(printf "%2d)" "$counter") $sub_name"
+        fi
+        echo "     ID: $sub_id"
+        echo "     State: $state"
+        echo
+        
+        ((counter++))
+    done < <(echo "$subscriptions_json" | jq -c '.[]')
+    
+    # Prompt for selection
+    while true; do
+        echo -n -e "${BLUE}Select subscription (1-$((counter-1))): ${NC}"
+        read -r selection
+        
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 1 ]] && [[ "$selection" -lt "$counter" ]]; then
+            SUBSCRIPTION_ID="${subscription_ids[$((selection-1))]}"
+            local selected_name=$(echo "$subscriptions_json" | jq -r ".[$((selection-1))].name")
+            log "INFO" "Selected subscription: $selected_name ($SUBSCRIPTION_ID)"
+            break
+        else
+            echo -e "${RED}Invalid selection. Please enter a number between 1 and $((counter-1)).${NC}"
+        fi
+    done
+}
+
+# Interactive function to get username
+interactive_get_username() {
+    print_section "User Identification" "$GREEN"
+    while [[ -z "$USER_NAME" ]]; do
+        read -r -p "Enter username for identification: " USER_NAME
+        if [[ -z "$USER_NAME" ]]; then
+            echo -e "${RED}❌ Username cannot be empty${NC}"
+        fi
+    done
+    echo -e "${GREEN}✅ Username: $USER_NAME${NC}"
+    echo
+}
+
+# Interactive function to get SSH public key
+interactive_get_ssh_key() {
+    print_section "SSH Public Key Selection"
+    
+    echo -e "${BLUE}SSH Key Options:${NC}"
+    echo "1) Enter path to SSH public key file"
+    echo "2) Paste SSH public key directly"
+    echo "3) Use default key (~/.ssh/id_rsa.pub)"
+    echo
+    
+    while [[ -z "$SSH_PUBLIC_KEY" ]]; do
+        echo -n -e "${BLUE}Select option (1-3): ${NC}"
+        read -r key_option
+        
+        case "$key_option" in
+            1)
+                echo -n -e "${BLUE}Enter path to SSH public key file: ${NC}"
+                read -r key_path
+                if [[ -f "$key_path" ]]; then
+                    SSH_PUBLIC_KEY="$key_path"
+                    log "INFO" "SSH key file set to: $key_path"
+                else
+                    echo -e "${RED}File not found: $key_path${NC}"
+                fi
+                ;;
+            2)
+                echo -e "${BLUE}Paste your SSH public key (press Enter when done):${NC}"
+                read -r SSH_PUBLIC_KEY
+                if [[ -n "$SSH_PUBLIC_KEY" ]]; then
+                    log "INFO" "SSH public key entered directly"
+                else
+                    echo -e "${RED}SSH key cannot be empty. Please try again.${NC}"
+                fi
+                ;;
+            3)
+                local default_key="~/.ssh/id_rsa.pub"
+                if [[ -f "${default_key/#\~/$HOME}" ]]; then
+                    SSH_PUBLIC_KEY="$default_key"
+                    log "INFO" "Using default SSH key: $default_key"
+                else
+                    echo -e "${RED}Default key file not found: $default_key${NC}"
+                fi
+                ;;
+            *)
+                echo -e "${RED}Invalid option. Please select 1, 2, or 3.${NC}"
+                ;;
+        esac
+    done
+}
+
+# Interactive function to get resource group
+interactive_get_resource_group() {
+    print_section "Select Resource Group"
+    
+    log "INFO" "Fetching resource groups for subscription..."
+    
+    # Get resource groups
+    local resource_groups_json
+    resource_groups_json=$(az group list --subscription "$SUBSCRIPTION_ID" --output json 2>/dev/null) || {
+        log "ERROR" "Failed to list resource groups for subscription: $SUBSCRIPTION_ID"
+        exit 1
+    }
+    
+    # Check if any resource groups are available
+    if [[ $(echo "$resource_groups_json" | jq 'length') -eq 0 ]]; then
+        log "ERROR" "No resource groups found in subscription: $SUBSCRIPTION_ID"
+        exit 1
+    fi
+    
+    # Filter resource groups to only show those with VMs using Azure Resource Graph
+    log "INFO" "Fetching VMs across all resource groups (single API call)..."
+    echo -e "${BLUE}Finding resource groups with VMs...${NC}"
+    
+    # Use Azure Resource Graph to get all VMs and their resource groups in one query
+    local vm_by_rg_json
+    vm_by_rg_json=$(az graph query -q "Resources | where type == 'microsoft.compute/virtualmachines' | where subscriptionId == '$SUBSCRIPTION_ID' | summarize VMCount=count() by resourceGroup | project resourceGroup, VMCount" --output json 2>/dev/null) || {
+        log "ERROR" "Azure Resource Graph query failed. Please ensure you have the necessary permissions."
+        exit 1
+    }
+    
+    # Process Resource Graph results
+    local resource_groups_with_vms=()
+    
+    # Check if we have data in the response
+    if [[ $(echo "$vm_by_rg_json" | jq '.data | length') -eq 0 ]]; then
+        log "WARNING" "No VMs found in subscription: $SUBSCRIPTION_ID"
+    fi
+    
+    # Process VM counts by resource group and merge with location info
+    while IFS= read -r vm_line; do
+        # Azure Resource Graph returns data as objects with resourceGroup and VMCount properties
+        local rg_name=$(echo "$vm_line" | jq -r '.resourceGroup')
+        local vm_count=$(echo "$vm_line" | jq -r '.VMCount')
+        
+        # Skip if values are null or empty
+        if [[ "$rg_name" == "null" || "$rg_name" == "" || "$vm_count" == "null" || "$vm_count" == "" ]]; then
+            continue
+        fi
+        
+        local rg_location="Unknown"
+        
+        # Find matching location from resource groups list
+        while IFS= read -r rg_line; do
+            local rg_list_name=$(echo "$rg_line" | jq -r '.name')
+            if [[ "$rg_list_name" == "$rg_name" ]]; then
+                rg_location=$(echo "$rg_line" | jq -r '.location')
+                break
+            fi
+        done < <(echo "$resource_groups_json" | jq -c '.[]')
+        
+        resource_groups_with_vms+=("$rg_name|$rg_location|$vm_count")
+    done < <(echo "$vm_by_rg_json" | jq -c '.data[]')
+    
+    # Check if any resource groups with VMs were found
+    if [[ ${#resource_groups_with_vms[@]} -eq 0 ]]; then
+        log "WARNING" "No resource groups with VMs found in subscription: $SUBSCRIPTION_ID"
+        echo -e "${YELLOW}No resource groups containing VMs were found.${NC}"
+        echo -n -e "${BLUE}Do you want to enter a resource group name manually? (y/n): ${NC}"
+        read -r continue_choice
+        if [[ "$continue_choice" != "y" && "$continue_choice" != "Y" ]]; then
+            log "INFO" "Operation cancelled by user"
+            exit 0
+        else
+            echo -n -e "${BLUE}Enter resource group name: ${NC}"
+            read -r VM_RESOURCE_GROUP
+            if [[ -n "$VM_RESOURCE_GROUP" ]]; then
+                log "INFO" "Custom resource group entered: $VM_RESOURCE_GROUP"
+                return 0
+            else
+                echo -e "${RED}Resource group name cannot be empty.${NC}"
+                exit 1
+            fi
+        fi
+    fi
+    
+    # Display resource groups with VMs
+    echo -e "${BLUE}Available Resource Groups (containing VMs):${NC}"
+    echo "────────────────────────────────────────────────────────────────"
+    
+    local resource_group_names=()
+    local counter=1
+    
+    for rg_info in "${resource_groups_with_vms[@]}"; do
+        IFS='|' read -r rg_name rg_location vm_count <<< "$rg_info"
+        resource_group_names+=("$rg_name")
+        
+        echo -e "$(printf "%2d" "$counter")) ${GREEN}$rg_name${NC}"
+        echo "     Location: $rg_location"
+        echo "     VMs: $vm_count"
+        echo
+        
+        ((counter++))
+    done
+    
+    # Add option to enter custom resource group
+    echo -e "${counter}) ${YELLOW}Enter custom resource group name${NC}"
+    echo
+    
+    # Prompt for selection
+    while true; do
+        echo -n -e "${BLUE}Select resource group (1-${counter}): ${NC}"
+        read -r selection
+        
+        if [[ "$selection" =~ ^[0-9]+$ ]]; then
+            if [[ "$selection" -ge 1 ]] && [[ "$selection" -lt "$counter" ]]; then
+                VM_RESOURCE_GROUP="${resource_group_names[$((selection-1))]}"
+                log "INFO" "Selected resource group: $VM_RESOURCE_GROUP"
+                break
+            elif [[ "$selection" -eq "$counter" ]]; then
+                echo -n -e "${BLUE}Enter resource group name: ${NC}"
+                read -r VM_RESOURCE_GROUP
+                if [[ -n "$VM_RESOURCE_GROUP" ]]; then
+                    log "INFO" "Custom resource group entered: $VM_RESOURCE_GROUP"
+                    break
+                else
+                    echo -e "${RED}Resource group name cannot be empty. Please try again.${NC}"
+                fi
+            else
+                echo -e "${RED}Invalid selection. Please enter a number between 1 and ${counter}.${NC}"
+            fi
+        else
+            echo -e "${RED}Invalid input. Please enter a valid number.${NC}"
+        fi
+    done
+}
+
+# Interactive function to get VM names
+interactive_get_vm_names() {
+    print_section "Virtual Machine Selection" "$GREEN"
+    echo "Retrieving VMs from resource group: $VM_RESOURCE_GROUP"
+    echo
+    
+    # Discover VMs in resource group
+    local vm_info_output
+    if ! vm_info_output=$(az vm list --resource-group "$VM_RESOURCE_GROUP" --query "[].{Name:name, PowerState:powerState, Location:location}" --output table 2>/dev/null); then
+        echo -e "${RED}❌ Error: Failed to retrieve VMs from resource group${NC}"
+        exit 1
+    fi
+    
+    if [[ -z "$vm_info_output" ]] || [[ "$vm_info_output" == *"[]"* ]]; then
+        echo -e "${YELLOW}⚠️  No VMs found in resource group: $VM_RESOURCE_GROUP${NC}"
+        echo "Please verify the resource group name contains VMs."
+        exit 1
+    fi
+    
+    echo "Available VMs in resource group '$VM_RESOURCE_GROUP':"
+    echo "$vm_info_output"
+    echo
+    
+    # Get VM names for validation
+    local available_vm_names
+    if ! available_vm_names=$(az vm list --resource-group "$VM_RESOURCE_GROUP" --query "[].name" --output tsv 2>/dev/null); then
+        echo -e "${RED}❌ Error: Failed to retrieve VM names${NC}"
+        exit 1
+    fi
+    
+    echo "Select VMs to remove SSH access from:"
+    echo "Options:"
+    echo "  • Enter VM names separated by spaces (e.g., vm1 vm2 vm3)"
+    echo "  • Press Enter to select ALL VMs in this resource group"
+    echo "  • Type 'list' to see available VMs again"
+    echo
+    
+    while [[ ${#VM_NAMES[@]} -eq 0 ]]; do
+        read -r -p "Enter VM names (or press Enter for all VMs): " vm_input
+        
+        if [[ -z "$vm_input" ]]; then
+            # Select all VMs
+            readarray -t VM_NAMES <<< "$available_vm_names"
+            echo -e "${GREEN}✅ Selected ALL VMs (${#VM_NAMES[@]} VMs)${NC}"
+            break
+        elif [[ "$vm_input" == "list" ]]; then
+            echo "$vm_info_output"
+            echo
+            continue
+        else
+            # Parse space-separated VM names
+            read -ra input_vms <<< "$vm_input"
+            local valid_vms=()
+            local invalid_vms=()
+            
+            for vm in "${input_vms[@]}"; do
+                if echo "$available_vm_names" | grep -q "^${vm}$"; then
+                    valid_vms+=("$vm")
+                else
+                    invalid_vms+=("$vm")
+                fi
+            done
+            
+            if [[ ${#invalid_vms[@]} -gt 0 ]]; then
+                echo -e "${RED}❌ Invalid VM names: ${invalid_vms[*]}${NC}"
+                echo "Available VMs: $(echo "$available_vm_names" | tr '\n' ' ')"
+            else
+                VM_NAMES=("${valid_vms[@]}")
+                echo -e "${GREEN}✅ Selected ${#VM_NAMES[@]} VMs: ${VM_NAMES[*]}${NC}"
+                break
+            fi
+        fi
+    done
+    echo
+}
+
+# Interactive function to confirm backup keys
+interactive_get_backup_confirmation() {
+    print_section "Backup Configuration" "$GREEN"
+    echo "Before removing SSH keys, we can backup the current authorized_keys file."
+    echo "This creates a timestamped backup for recovery purposes."
+    echo
+    
+    while true; do
+        read -r -p "Create backup of authorized_keys before modification? [Y/n]: " backup_choice
+        backup_choice=${backup_choice:-Y}  # Default to Y if empty
+        
+        case "$backup_choice" in
+            [Yy]|[Yy][Ee][Ss])
+                BACKUP_KEYS=true
+                echo -e "${GREEN}✅ Will create backup before removing keys${NC}"
+                break
+                ;;
+            [Nn]|[Nn][Oo])
+                BACKUP_KEYS=false
+                echo -e "${YELLOW}⚠️  Will NOT create backup (proceed with caution)${NC}"
+                break
+                ;;
+            *)
+                echo -e "${RED}❌ Please enter Y (yes) or N (no)${NC}"
+                ;;
+        esac
+    done
+    echo
+}
+
+# Interactive function to confirm dry run mode
+interactive_get_dry_run() {
+    print_section "Execution Mode" "$GREEN"
+    while true; do
+        read -r -p "Run in dry-run mode (preview operations without making changes)? [y/N]: " dry_run_choice
+        dry_run_choice=${dry_run_choice:-N}  # Default to N if empty
+        
+        case "$dry_run_choice" in
+            [Yy]|[Yy][Ee][Ss])
+                DRY_RUN=true
+                echo -e "${YELLOW}⚠️  Dry-run mode enabled - no changes will be made${NC}"
+                break
+                ;;
+            [Nn]|[Nn][Oo])
+                DRY_RUN=false
+                echo -e "${GREEN}✅ Live mode - changes will be applied${NC}"
+                break
+                ;;
+            *)
+                echo -e "${RED}❌ Please enter Y (yes) or N (no)${NC}"
+                ;;
+        esac
+    done
+    echo
 }
 
 # Remove SSH keys from Azure VMs (azroot account only)
@@ -796,6 +1197,9 @@ validate_input_for_row() {
 #################################################################################
 
 main() {
+    # Store original parameter count to detect interactive mode
+    local original_param_count=$#
+    
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -850,7 +1254,7 @@ main() {
     # Check prerequisites first
     check_prerequisites
     
-    # Determine mode: CSV file or command line parameters
+    # Determine mode: CSV file, command line parameters, or interactive
     if [[ -n "$CSV_FILE" ]]; then
         # CSV File Mode
         print_section "CSV File Mode"
@@ -867,6 +1271,50 @@ main() {
             log "ERROR" "CSV file processing completed with errors"
             exit 1
         fi
+    elif [[ $original_param_count -eq 0 ]]; then
+        # Interactive Mode (no parameters provided)
+        print_section "🔧 Azure VM SSH Key Offboarding - Interactive Mode" "$GREEN"
+        echo -e "${GREEN}Welcome to the interactive SSH key offboarding tool!${NC}"
+        echo "This tool will guide you through removing SSH keys from Azure VMs."
+        echo
+        log "INFO" "Starting interactive mode"
+        
+        # Interactive prompts
+        interactive_get_subscription
+        interactive_get_username
+        interactive_get_ssh_key
+        interactive_get_resource_group
+        interactive_get_vm_names
+        interactive_get_backup_confirmation
+        interactive_get_dry_run
+        
+        # Validate SSH key
+        validate_ssh_key
+        
+        # Check VM permissions
+        check_vm_permissions "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP"
+        
+        # Show configuration summary and ask for confirmation
+        print_section "Configuration Summary" "$BLUE"
+        echo -e "${BLUE}Username:${NC} $USER_NAME"
+        echo -e "${BLUE}Subscription ID:${NC} $SUBSCRIPTION_ID"
+        echo -e "${BLUE}Resource Group:${NC} $VM_RESOURCE_GROUP"
+        echo -e "${BLUE}Target VMs:${NC} ${VM_NAMES[*]}"
+        echo -e "${BLUE}Backup Keys:${NC} $BACKUP_KEYS"
+        echo -e "${BLUE}Dry Run Mode:${NC} $DRY_RUN"
+        echo
+        
+        if ! prompt_for_confirmation; then
+            echo -e "${YELLOW}⚠️  Operation cancelled by user${NC}"
+            exit 0
+        fi
+        
+        # Remove SSH access from VMs
+        current_vm=0
+        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"
+        
+        # Generate summary
+        generate_summary
     else
         # Command Line Mode
         print_section "Command Line Mode"
