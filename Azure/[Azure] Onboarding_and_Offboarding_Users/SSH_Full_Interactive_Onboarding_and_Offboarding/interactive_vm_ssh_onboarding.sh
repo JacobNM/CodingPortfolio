@@ -518,55 +518,42 @@ interactive_get_resource_group() {
     # Use Azure Resource Graph to get all VMs and their resource groups in one query
     local vm_by_rg_json
     vm_by_rg_json=$(az graph query -q "Resources | where type == 'microsoft.compute/virtualmachines' | where subscriptionId == '$SUBSCRIPTION_ID' | summarize VMCount=count() by resourceGroup | project resourceGroup, VMCount" --output json 2>/dev/null) || {
-        log "WARNING" "Azure Resource Graph query failed, falling back to individual resource group checks..."
-        echo -e "${YELLOW}Resource Graph not available, using slower method...${NC}"
+        log "ERROR" "Azure Resource Graph query failed. Please ensure you have the necessary permissions."
+        exit 1
+    }
+    
+    # Process Resource Graph results
+    local resource_groups_with_vms=()
+    
+    # Check if we have data in the response
+    if [[ $(echo "$vm_by_rg_json" | jq '.data | length') -eq 0 ]]; then
+        log "WARNING" "No VMs found in subscription: $SUBSCRIPTION_ID"
+    fi
+    
+    # Process VM counts by resource group and merge with location info
+    while IFS= read -r vm_line; do
+        # Azure Resource Graph returns data as objects with resourceGroup and VMCount properties
+        local rg_name=$(echo "$vm_line" | jq -r '.resourceGroup')
+        local vm_count=$(echo "$vm_line" | jq -r '.VMCount')
         
-        # Fallback to the individual API call method
-        local resource_groups_with_vms=()
-        local total_rgs=$(echo "$resource_groups_json" | jq 'length')
-        local current_rg=0
+        # Skip if values are null or empty
+        if [[ "$rg_name" == "null" || "$rg_name" == "" || "$vm_count" == "null" || "$vm_count" == "" ]]; then
+            continue
+        fi
         
-        while IFS= read -r line; do
-            local rg_name=$(echo "$line" | jq -r '.name')
-            local rg_location=$(echo "$line" | jq -r '.location')
-            
-            ((current_rg++))
-            echo -n -e "\r${BLUE}Checking resource group $current_rg of $total_rgs: $rg_name${NC}"
-            
-            # Check if this resource group has any VMs
-            local vm_count
-            vm_count=$(az vm list --resource-group "$rg_name" --subscription "$SUBSCRIPTION_ID" --query 'length(@)' --output tsv 2>/dev/null) || vm_count=0
-            
-            if [[ "$vm_count" -gt 0 ]]; then
-                resource_groups_with_vms+=("$rg_name|$rg_location|$vm_count")
+        local rg_location="Unknown"
+        
+        # Find matching location from resource groups list
+        while IFS= read -r rg_line; do
+            local rg_list_name=$(echo "$rg_line" | jq -r '.name')
+            if [[ "$rg_list_name" == "$rg_name" ]]; then
+                rg_location=$(echo "$rg_line" | jq -r '.location')
+                break
             fi
         done < <(echo "$resource_groups_json" | jq -c '.[]')
         
-        echo -e "\n" # Clear the progress line
-    }
-    
-    # Process Resource Graph results if successful
-    if [[ -n "$vm_by_rg_json" ]] && [[ "$vm_by_rg_json" != "null" ]]; then
-        local resource_groups_with_vms=()
-        
-        # Process VM counts by resource group and merge with location info
-        while IFS= read -r vm_line; do
-            local rg_name=$(echo "$vm_line" | jq -r '.resourceGroup')
-            local vm_count=$(echo "$vm_line" | jq -r '.VMCount')
-            local rg_location="Unknown"
-            
-            # Find matching location from resource groups list
-            while IFS= read -r rg_line; do
-                local rg_list_name=$(echo "$rg_line" | jq -r '.name')
-                if [[ "$rg_list_name" == "$rg_name" ]]; then
-                    rg_location=$(echo "$rg_line" | jq -r '.location')
-                    break
-                fi
-            done < <(echo "$resource_groups_json" | jq -c '.[]')
-            
-            resource_groups_with_vms+=("$rg_name|$rg_location|$vm_count")
-        done < <(echo "$vm_by_rg_json" | jq -c '.data[]')
-    fi
+        resource_groups_with_vms+=("$rg_name|$rg_location|$vm_count")
+    done < <(echo "$vm_by_rg_json" | jq -c '.data[]')
     
     # Check if any resource groups with VMs were found
     if [[ ${#resource_groups_with_vms[@]} -eq 0 ]]; then
