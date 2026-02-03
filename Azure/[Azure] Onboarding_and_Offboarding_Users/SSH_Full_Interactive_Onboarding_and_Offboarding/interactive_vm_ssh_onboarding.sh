@@ -35,15 +35,6 @@ log() {
     echo -e "${timestamp} [${level}] ${message}" | tee -a "$LOG_FILE"
 }
 
-# Log-only function (writes only to log file, not terminal)
-log_only() {
-    local level=$1
-    shift
-    local message="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo -e "${timestamp} [${level}] ${message}" >> "$LOG_FILE"
-}
-
 # Print section header with visual separator
 print_section() {
     local title="$1"
@@ -85,14 +76,6 @@ print_operation_status() {
             fi
             ;;
     esac
-}
-
-# Print progress indicator
-print_progress() {
-    local current="$1"
-    local total="$2"
-    local operation="$3"
-    echo -e "${BLUE}[Step $current/$total] $operation${NC}"
 }
 
 # Print usage information
@@ -304,7 +287,7 @@ discover_vms_in_resource_group() {
     
     # In dry-run mode, we still want to discover actual VMs, just not modify them
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_only "INFO" "DRY RUN: Discovering VMs in resource group '$resource_group'" >&2
+        log "INFO" "DRY RUN: Would discover VMs in resource group '$resource_group'"
     fi
     
     # Verify subscription is set correctly
@@ -566,29 +549,20 @@ interactive_get_resource_group() {
     if [[ -n "$vm_by_rg_json" ]] && [[ "$vm_by_rg_json" != "null" ]]; then
         local resource_groups_with_vms=()
         
-        # Debug: Check the structure of the returned JSON
-        log_only "DEBUG" "Azure Resource Graph response: $vm_by_rg_json"
-        
-        # Build lookup for resource group locations
-        declare -A rg_locations
-        while IFS= read -r line; do
-            local rg_name=$(echo "$line" | jq -r '.name')
-            local rg_location=$(echo "$line" | jq -r '.location')
-            if [[ -n "$rg_name" ]] && [[ "$rg_name" != "null" ]]; then
-                rg_locations["$rg_name"]="$rg_location"
-            fi
-        done < <(echo "$resource_groups_json" | jq -c '.[]')
-        
-        # Process VM counts by resource group
-        while IFS= read -r line; do
-            local rg_name=$(echo "$line" | jq -r '.resourceGroup')
-            local vm_count=$(echo "$line" | jq -r '.VMCount')
-            
-            # Safely access associative array with validation
+        # Process VM counts by resource group and merge with location info
+        while IFS= read -r vm_line; do
+            local rg_name=$(echo "$vm_line" | jq -r '.resourceGroup')
+            local vm_count=$(echo "$vm_line" | jq -r '.VMCount')
             local rg_location="Unknown"
-            if [[ -n "$rg_name" ]] && [[ "$rg_name" != "null" ]] && [[ ${rg_locations[$rg_name]+_} ]]; then
-                rg_location="${rg_locations[$rg_name]}"
-            fi
+            
+            # Find matching location from resource groups list
+            while IFS= read -r rg_line; do
+                local rg_list_name=$(echo "$rg_line" | jq -r '.name')
+                if [[ "$rg_list_name" == "$rg_name" ]]; then
+                    rg_location=$(echo "$rg_line" | jq -r '.location')
+                    break
+                fi
+            done < <(echo "$resource_groups_json" | jq -c '.[]')
             
             resource_groups_with_vms+=("$rg_name|$rg_location|$vm_count")
         done < <(echo "$vm_by_rg_json" | jq -c '.data[]')
@@ -673,25 +647,12 @@ interactive_get_vm_names() {
     
     log "INFO" "Fetching VMs in resource group: $VM_RESOURCE_GROUP"
     
-    # Get VMs in the resource group
+    # Get VMs in the resource group (we already know VMs exist from the filtering)
     local vms_json
     vms_json=$(az vm list --resource-group "$VM_RESOURCE_GROUP" --subscription "$SUBSCRIPTION_ID" --output json 2>/dev/null) || {
         log "ERROR" "Failed to list VMs in resource group: $VM_RESOURCE_GROUP"
         exit 1
     }
-    
-    # Check if any VMs are available
-    if [[ $(echo "$vms_json" | jq 'length') -eq 0 ]]; then
-        log "WARNING" "No VMs found in resource group: $VM_RESOURCE_GROUP"
-        echo -e "${YELLOW}No VMs found in the specified resource group.${NC}"
-        echo -n -e "${BLUE}Do you want to continue anyway? (y/n): ${NC}"
-        read -r continue_choice
-        if [[ "$continue_choice" != "y" && "$continue_choice" != "Y" ]]; then
-            log "INFO" "Operation cancelled by user"
-            exit 0
-        fi
-        return 0
-    fi
     
     # Display VMs
     echo -e "\n${BLUE}Available Virtual Machines:${NC}"
@@ -849,11 +810,11 @@ manage_vm_ssh_access() {
     print_operation_status "SSH Key Management" "start" "Processing ${#vm_names[@]} VMs"
     
     for vm_name in "${vm_names[@]}"; do
-        print_progress "$((++current_vm))" "${#vm_names[@]}" "Processing VM: $vm_name"
+        echo -e "${BLUE}Processing VM $((++current_vm)) of ${#vm_names[@]}: $vm_name${NC}"
         
         if [[ "$DRY_RUN" == "true" ]]; then
             print_operation_status "SSH Key Addition: $vm_name" "skip" "Dry run mode - would add SSH key to azroot account"
-            log_only "INFO" "DRY RUN: Would add SSH key to $vm_name (azroot account)"
+            log "INFO" "DRY RUN: Would add SSH key to $vm_name (azroot account)"
         else
             # Check if VM exists and is running (only in non-dry-run mode)
             local vm_status=$(az vm get-instance-view --resource-group "$resource_group" --name "$vm_name" \
@@ -1054,7 +1015,7 @@ for row in reader:
             continue
         fi
         
-        print_progress "$((line_number-1))" "$line_count" "Processing user: $csv_username"
+        echo -e "${BLUE}Processing user $((line_number-1)) of $line_count: $csv_username${NC}"
         
         # Set variables for current row
         USER_NAME="$csv_username"
