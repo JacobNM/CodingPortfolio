@@ -504,8 +504,9 @@ interactive_get_ssh_key() {
                 ;;
             3)
                 local default_key="~/.ssh/id_rsa.pub"
-                if [[ -f "${default_key/#\~/$HOME}" ]]; then
-                    SSH_PUBLIC_KEY="$default_key"
+                local expanded_key="${default_key/#\~/$HOME}"
+                if [[ -f "$expanded_key" ]]; then
+                    SSH_PUBLIC_KEY="$expanded_key"
                     log "INFO" "Using default SSH key: $default_key"
                 else
                     echo -e "${RED}Default key file not found: $default_key${NC}"
@@ -803,7 +804,8 @@ remove_vm_ssh_access() {
     
     local subscription_id="$1"
     local resource_group="$2"
-    shift 2
+    local skip_confirmation="${3:-false}"
+    shift 3
     local vm_names=("$@")
     
     # Check if we need to discover VMs (empty array or array with only empty strings)
@@ -853,8 +855,8 @@ remove_vm_ssh_access() {
         fi
     fi
     
-    # Prompt for confirmation if not in dry-run mode
-    if [[ "$DRY_RUN" != "true" ]]; then
+    # Prompt for confirmation if not in dry-run mode and confirmation not already handled
+    if [[ "$DRY_RUN" != "true" && "$skip_confirmation" != "true" ]]; then
         local vm_list_str="$(IFS=', '; echo "${vm_names[*]}")"
         local operation_type="SSH Key Removal"
         
@@ -1157,7 +1159,7 @@ process_single_operation() {
     
     # Remove SSH access from VMs for current operation
     current_vm=0
-    if ! remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"; then
+    if ! remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "false" "${VM_NAMES[@]:-}"; then
         return 1
     fi
     
@@ -1326,7 +1328,7 @@ main() {
         
         # Remove SSH access from VMs
         current_vm=0
-        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"
+        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "true" "${VM_NAMES[@]:-}"
         
         # Generate summary
         generate_summary
@@ -1346,7 +1348,7 @@ main() {
         
         # Remove SSH access from VMs
         current_vm=0
-        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "${VM_NAMES[@]:-}"
+        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "false" "${VM_NAMES[@]:-}"
         
         # Generate summary
         generate_summary
