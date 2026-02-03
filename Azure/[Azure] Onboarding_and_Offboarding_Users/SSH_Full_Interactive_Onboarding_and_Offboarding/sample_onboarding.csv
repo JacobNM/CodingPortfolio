@@ -1,0 +1,6 @@
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02"
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03
+mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...",dev-rg,"vm04,vm05"
+# Empty vm_names field enables auto-discovery of all VMs in the resource group:
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
