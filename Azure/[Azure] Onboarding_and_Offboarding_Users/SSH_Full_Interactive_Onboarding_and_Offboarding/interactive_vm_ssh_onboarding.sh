@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 # Default values
 SUBSCRIPTION_ID=""
 USER_NAME=""
-DRY_RUN=false  # Controlled by command line only (-d flag), NOT from CSV file
+DRY_RUN=false 
 VM_RESOURCE_GROUP=""
 VM_NAMES=()
 SSH_PUBLIC_KEY=""
@@ -512,7 +512,7 @@ interactive_get_resource_group() {
     fi
     
     # Filter resource groups to only show those with VMs using Azure Resource Graph
-    log "INFO" "Fetching VMs across all resource groups (single API call)..."
+    log "INFO" "Fetching VMs across all resource groups..."
     echo -e "${BLUE}Finding resource groups with VMs...${NC}"
     
     # Use Azure Resource Graph to get all VMs and their resource groups in one query
@@ -557,24 +557,10 @@ interactive_get_resource_group() {
     
     # Check if any resource groups with VMs were found
     if [[ ${#resource_groups_with_vms[@]} -eq 0 ]]; then
-        log "WARNING" "No resource groups with VMs found in subscription: $SUBSCRIPTION_ID"
-        echo -e "${YELLOW}No resource groups containing VMs were found.${NC}"
-        echo -n -e "${BLUE}Do you want to enter a resource group name manually? (y/n): ${NC}"
-        read -r continue_choice
-        if [[ "$continue_choice" != "y" && "$continue_choice" != "Y" ]]; then
-            log "INFO" "Operation cancelled by user"
-            exit 0
-        else
-            echo -n -e "${BLUE}Enter resource group name: ${NC}"
-            read -r VM_RESOURCE_GROUP
-            if [[ -n "$VM_RESOURCE_GROUP" ]]; then
-                log "INFO" "Custom resource group entered: $VM_RESOURCE_GROUP"
-                return 0
-            else
-                echo -e "${RED}Resource group name cannot be empty.${NC}"
-                exit 1
-            fi
-        fi
+        log "ERROR" "No resource groups with VMs found in subscription: $SUBSCRIPTION_ID"
+        echo -e "${RED}No resource groups containing VMs were found in this subscription.${NC}"
+        echo -e "${RED}Please ensure VMs exist in your subscription before running this script.${NC}"
+        exit 1
     fi
     
     # Display resource groups with VMs
@@ -596,34 +582,17 @@ interactive_get_resource_group() {
         ((counter++))
     done
     
-    # Add option to enter custom resource group
-    echo -e "${counter}) ${YELLOW}Enter custom resource group name${NC}"
-    echo
-    
     # Prompt for selection
     while true; do
-        echo -n -e "${BLUE}Select resource group (1-${counter}): ${NC}"
+        echo -n -e "${BLUE}Select resource group (1-$((counter-1))): ${NC}"
         read -r selection
         
-        if [[ "$selection" =~ ^[0-9]+$ ]]; then
-            if [[ "$selection" -ge 1 ]] && [[ "$selection" -lt "$counter" ]]; then
-                VM_RESOURCE_GROUP="${resource_group_names[$((selection-1))]}"
-                log "INFO" "Selected resource group: $VM_RESOURCE_GROUP"
-                break
-            elif [[ "$selection" -eq "$counter" ]]; then
-                echo -n -e "${BLUE}Enter resource group name: ${NC}"
-                read -r VM_RESOURCE_GROUP
-                if [[ -n "$VM_RESOURCE_GROUP" ]]; then
-                    log "INFO" "Custom resource group entered: $VM_RESOURCE_GROUP"
-                    break
-                else
-                    echo -e "${RED}Resource group name cannot be empty. Please try again.${NC}"
-                fi
-            else
-                echo -e "${RED}Invalid selection. Please enter a number between 1 and ${counter}.${NC}"
-            fi
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 1 ]] && [[ "$selection" -lt "$counter" ]]; then
+            VM_RESOURCE_GROUP="${resource_group_names[$((selection-1))]}"
+            log "INFO" "Selected resource group: $VM_RESOURCE_GROUP"
+            break
         else
-            echo -e "${RED}Invalid input. Please enter a valid number.${NC}"
+            echo -e "${RED}Invalid selection. Please enter a number between 1 and $((counter-1)).${NC}"
         fi
     done
 }
@@ -662,31 +631,19 @@ interactive_get_vm_names() {
         ((counter++))
     done < <(echo "$vms_json" | jq -c '.[]')
     
-    # Add options for all VMs or custom selection
-    echo -e "${counter}) ${GREEN}Select ALL VMs in resource group${NC}"
-    echo -e "$((counter+1))) ${YELLOW}Enter custom VM names${NC}\n"
+    # Add option for all VMs
+    echo -e "${counter}) ${GREEN}Select ALL VMs in resource group${NC}\n"
     
     # Prompt for selection
     echo -e "${BLUE}You can select multiple VMs by entering numbers separated by commas (e.g., 1,3,5)${NC}"
     while true; do
-        echo -n -e "${BLUE}Select VMs (1-$((counter+1))) or 'all' for all VMs: ${NC}"
+        echo -n -e "${BLUE}Select VMs (1-${counter}) or 'all' for all VMs: ${NC}"
         read -r selection
         
         if [[ "$selection" == "all" || "$selection" == "$counter" ]]; then
             # Select all VMs
             VM_NAMES=("${vm_names_list[@]}")
             log "INFO" "Selected all VMs: ${VM_NAMES[*]}"
-            break
-        elif [[ "$selection" == "$((counter+1))" ]]; then
-            # Custom VM names
-            echo -n -e "${BLUE}Enter VM names separated by commas: ${NC}"
-            read -r custom_vms
-            IFS=',' read -ra VM_NAMES <<< "$custom_vms"
-            # Trim whitespace
-            for i in "${!VM_NAMES[@]}"; do
-                VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
-            done
-            log "INFO" "Custom VMs entered: ${VM_NAMES[*]}"
             break
         else
             # Parse comma-separated selections
