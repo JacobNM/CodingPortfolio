@@ -44,58 +44,27 @@ Direct parameter specification for scripted or advanced operations.
 
 Batch processing using CSV files for bulk user management operations.
 
-## 🚀 Getting Started - Interactive Mode (Recommended)
+## 🎯 Interactive Mode (Recommended - Easiest Way to Get Started)
 
-**The easiest way to use these scripts is to simply run them without any parameters:**
+**Simply run without parameters for a fully guided experience:**
 
 ```bash
 # For onboarding (adding SSH access)
 ./interactive_vm_ssh_onboarding.sh
 
-# For offboarding (removing SSH access)  
+# For offboarding (removing SSH access)
 ./interactive_vm_ssh_offboarding.sh
 ```
 
 ### Why Interactive Mode?
 
-**🎯 Perfect for All Skill Levels**
-- **No Azure expertise required** - the script guides you through everything
-- **No memorizing command-line parameters** - all options presented clearly
-- **Visual confirmation** of selections before execution
-- **Error prevention** through validation and smart defaults
+**🎯 Perfect for All Users** - No Azure expertise required, visual confirmation, error prevention through validation
 
-**⚡ Faster and More Reliable**
-- **Auto-discovery** of subscriptions, resource groups, and VMs
-- **Real-time validation** of inputs and Azure resources  
-- **Multi-select capabilities** for batch operations on multiple VMs
-- **Progress tracking** with visual feedback during operations
+**⚡ Smart & Efficient** - Auto-discovery of resources, real-time validation, multi-select capabilities, progress tracking
 
-**🛡️ Safer Operations**
-- **Preview mode** shows exactly what will be done before execution
-- **Confirmation prompts** prevent accidental changes
-- **Intelligent filtering** shows only relevant resources (running VMs, etc.)
-- **Backup management** with guided prompts for offboarding operations
+**🛡️ Safe Operations** - Preview mode, confirmation prompts, intelligent filtering, guided backup management
 
----
-
-## 🎯 Interactive Mode (Easiest Way to Get Started)
-
-Both scripts are designed to be **fully interactive** when run without parameters. This is the recommended approach for most users:
-
-```bash
-# Simply run the script without any parameters
-./interactive_vm_ssh_onboarding.sh
-
-# Or for offboarding
-./interactive_vm_ssh_offboarding.sh
-```
-
-### What Interactive Mode Provides:
-
-**🔍 Intelligent Azure Discovery**
-- Automatically lists your available Azure subscriptions
-- Filters and displays only resource groups containing VMs
-- Shows VM status, power state, and key details for informed selection
+### What You Get:
 
 **🎮 User-Friendly Selection Process**
 - **Subscription Selection**: Choose from a numbered list of your subscriptions
@@ -173,114 +142,86 @@ Both scripts are designed to be **fully interactive** when run without parameter
    Operation completed: 2/2 VMs processed successfully
 ```
 
-### Parameters
+## 🔧 Command Line Parameters (Advanced Usage)
+
+When using command line mode instead of interactive mode:
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `-u, --username <username>` | ✅* | Username for identification |
 | `-s, --subscription <subscription_id>` | ✅* | Azure subscription ID |
-| `-k, --key <ssh_public_key>` | ✅* | SSH public key file path or key content |
+| `-k, --key <ssh_public_key>` | ✅* | SSH public key file path or key content (for removal in offboarding) |
 | `-g, --resource-group <vm_resource_group>` | ✅* | Resource group containing VMs |
 | `-v, --vm <vm_name>` | ❌* | VM name (can be specified multiple times, or omit for auto-discovery) |
 | `-f, --file <csv_file>` | ✅** | CSV file for batch operations |
+| `-n, --no-backup` | ❌ | No backup (skip backup of authorized_keys - offboarding only) |
 | `-d, --dry-run` | ❌ | Dry run mode (show what would be done) |
 | `-h, --help` | ❌ | Display help message |
 
 *Required for command line mode (except `-v` which enables auto-discovery when omitted)  
 **Required for CSV file mode (replaces command line parameters)
 
-### Usage Examples
+### Command Line Usage Examples
 
-#### Add SSH key to a single VM
+#### Single VM operations
 
 ```bash
-./interactive_vm_ssh_onboarding.sh \
-  -u john.doe \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k ~/.ssh/id_rsa.pub \
-  -g "production-vms-rg" \
-  -v "web-server-01"
+# Onboarding (add SSH key)
+./interactive_vm_ssh_onboarding.sh -u john.doe -s "subscription-id" -k ~/.ssh/id_rsa.pub -g "rg-name" -v "vm-name"
+
+# Offboarding (remove SSH key) 
+./interactive_vm_ssh_offboarding.sh -u john.doe -s "subscription-id" -k ~/.ssh/id_rsa.pub -g "rg-name" -v "vm-name"
 ```
 
-#### Add SSH key to multiple VMs
+#### Multiple VMs
 
 ```bash
-./interactive_vm_ssh_onboarding.sh \
-  -u jane.smith \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k ~/.ssh/id_rsa.pub \
-  -g "production-vms-rg" \
-  -v "web-server-01" -v "web-server-02" -v "db-server-01"
+# Add to multiple VMs
+./interactive_vm_ssh_onboarding.sh -u user -s "sub-id" -k ~/.ssh/key.pub -g "rg" -v "vm1" -v "vm2" -v "vm3"
+
+# Remove from all VMs in resource group (auto-discovery)
+./interactive_vm_ssh_offboarding.sh -u user -s "sub-id" -k ~/.ssh/key.pub -g "rg"
 ```
 
-#### Add SSH key to all VMs in resource group (auto-discovery)
+#### Batch processing and dry runs
 
 ```bash
-./interactive_vm_ssh_onboarding.sh \
-  -u jane.smith \
-  -s "87654321-4321-4321-4321-210987654321" \
-  -k ~/.ssh/jane_key.pub \
-  -g "production-rg"
-  # No -v parameter = discovers all VMs automatically
-```
-
-#### Dry run to preview changes
-
-```bash
-./interactive_vm_ssh_onboarding.sh \
-  -u john.doe \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k ~/.ssh/id_rsa.pub \
-  -g "production-vms-rg" \
-  -v "web-server-01" \
-  -d
-```
-
-*Note: Dry run mode bypasses confirmation prompts and shows what changes would be made*
-
-#### Using SSH key content directly
-
-```bash
-./interactive_vm_ssh_onboarding.sh \
-  -u john.doe \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..." \
-  -g "production-vms-rg" \
-  -v "web-server-01"
-```
-
-#### Batch processing with CSV file
-
-```bash
+# CSV batch processing
 ./interactive_vm_ssh_onboarding.sh -f onboarding_batch.csv
+./interactive_vm_ssh_offboarding.sh -f offboarding_batch.csv
+
+# Dry run mode (preview changes)
+./interactive_vm_ssh_onboarding.sh -f batch.csv -d
 ```
 
-#### CSV file with dry run
+## 📄 CSV File Formats for Batch Operations
 
-```bash
-./interactive_vm_ssh_onboarding.sh -f onboarding_batch.csv -d
-```
-
-### CSV File Format for Onboarding
-
-Create a CSV file with the following header and format:
+### Onboarding CSV Format
 
 ```csv
 username,subscription_id,ssh_public_key,vm_resource_group,vm_names
 john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02,vm03"
 jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm04
-mike.wilson,11111111-2222-3333-4444-555555555555,"ssh-rsa AAAAB3Nz...",dev-rg,"vm05,vm06"
-# Empty vm_names field enables auto-discovery of all VMs in the resource group:
+# Empty vm_names field enables auto-discovery:
 sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 ```
 
-**CSV Requirements:**
+### Offboarding CSV Format
 
+```csv
+username,subscription_id,ssh_public_key,vm_resource_group,vm_names,backup_keys
+john.doe,12345678-1234-1234-1234-123456789012,~/.ssh/id_rsa.pub,prod-rg,"vm01,vm02",true
+jane.smith,87654321-4321-4321-4321-210987654321,~/.ssh/jane_key.pub,test-rg,vm03,false
+# Empty vm_names field enables auto-discovery:
+sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,true
+```
+
+**CSV Requirements:**
 - Header row is required and must match exactly
-- Multiple VM names should be comma-separated within a quoted field (for example: `"vm01,vm02,vm03"`)
-- Leave vm_names empty for auto-discovery of all VMs in the resource group
-- SSH keys can be file paths or direct key content
-- Direct key content should be quoted to handle spaces
+- Multiple VM names should be comma-separated within quotes: `"vm01,vm02,vm03"`
+- Leave `vm_names` empty for auto-discovery of all VMs in the resource group
+- SSH keys can be file paths or direct key content (quote content with spaces)
+- Offboarding only: `backup_keys` field controls whether to backup authorized_keys before removal
 
 ## 🗑️ SSH Offboarding Script Usage
 
@@ -307,99 +248,7 @@ The script will interactively guide you through:
 ./interactive_vm_ssh_offboarding.sh -f <csv_file> [OPTIONS]
 ```
 
-# CSV file mode for batch operations
-./interactive_vm_ssh_onboarding.sh -f <csv_file> [OPTIONS]
-```
-
-### Parameters
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `-u, --username <username>` | ✅* | Username for identification |
-| `-s, --subscription <subscription_id>` | ✅* | Azure subscription ID |
-| `-k, --key <ssh_public_key>` | ✅* | SSH public key to remove (file path or key content) |
-| `-g, --resource-group <vm_resource_group>` | ✅* | Resource group containing VMs |
-| `-v, --vm <vm_name>` | ❌* | VM name (can be specified multiple times, or omit for auto-discovery) |
-| `-f, --file <csv_file>` | ✅** | CSV file for batch operations |
-| `-n, --no-backup` | ❌ | No backup (skip backup of authorized_keys) |
-| `-d, --dry-run` | ❌ | Dry run mode (show what would be done) |
-| `-h, --help` | ❌ | Display help message |
-
-*Required for command line mode (except `-v` which enables auto-discovery when omitted)  
-**Required for CSV file mode (replaces command line parameters)
-
-### Usage Examples
-
-#### Remove specific SSH key from a single VM
-
-```bash
-./interactive_vm_ssh_offboarding.sh \
-  -u john.doe \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k ~/.ssh/id_rsa.pub \
-  -g "production-vms-rg" \
-  -v "web-server-01"
-```
-
-#### Remove specific key from multiple VMs
-
-```bash
-./interactive_vm_ssh_offboarding.sh \
-  -u jane.smith \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k ~/.ssh/jane_key.pub \
-  -g "production-vms-rg" \
-  -v "web-server-01" -v "web-server-02" -v "db-server-01"
-```
-
-#### Remove specific key from all VMs in resource group (auto-discovery)
-
-```bash
-./interactive_vm_ssh_offboarding.sh \
-  -u jane.smith \
-  -s "87654321-4321-4321-4321-210987654321" \
-  -k ~/.ssh/jane_key.pub \
-  -g "production-rg"
-  # No -v parameter = discovers all VMs automatically
-```
-
-#### Remove specific key without backup
-
-```bash
-./interactive_vm_ssh_offboarding.sh \
-  -u john.doe \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k ~/.ssh/id_rsa.pub \
-  -g "production-vms-rg" \
-  -v "web-server-01" \
-  -n
-```
-
-#### Dry run to preview changes
-
-```bash
-./interactive_vm_ssh_offboarding.sh \
-  -u john.doe \
-  -s "12345678-1234-1234-1234-123456789012" \
-  -k ~/.ssh/id_rsa.pub \
-  -g "production-vms-rg" \
-  -v "web-server-01" \
-  -d
-```
-
-#### Batch processing with CSV file
-
-```bash
-./interactive_vm_ssh_offboarding.sh -f offboarding_batch.csv
-```
-
-#### CSV file with dry run
-
-```bash
-./interactive_vm_ssh_offboarding.sh -f offboarding_batch.csv -d
-```
-
-*Note: Dry run mode bypasses confirmation prompts and shows what changes would be made*
+*See [Command Line Parameters](#-command-line-parameters-advanced-usage) section above for full parameter details and examples.*
 
 ### CSV File Format for Offboarding
 
@@ -425,27 +274,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 
 ## How It Works
 
-### Interactive Mode Process (Recommended)
-
-**🎮 User-Driven Workflow:**
-1. **Script Launch** - Simply run without parameters for guided experience
-2. **Azure Discovery** - Automatic detection of subscriptions and Azure resources
-3. **Interactive Selection** - User-friendly menus for subscription, resource group, and VM selection
-4. **Smart Configuration** - Flexible SSH key input with validation and auto-detection
-5. **Operation Preview** - Clear summary of planned actions with user confirmation
-6. **Execution with Feedback** - Real-time progress tracking and visual status updates
-7. **Result Summary** - Detailed report of successful/failed operations
-
-**Key Interactive Features:**
-- **Auto-Discovery**: Finds and lists your Azure resources automatically
-- **Smart Filtering**: Shows only relevant options (running VMs, resource groups with VMs)
-- **Multi-Select Support**: Handle multiple VMs with simple y/n/a prompts
-- **Input Validation**: Real-time checking of SSH keys and Azure resources
-- **Visual Feedback**: Color-coded progress indicators and status updates
-
-### Command Line Mode Process (Advanced)
-
-**⚙️ Automated Workflow:**
+### Script Processing Workflow
 
 ### Onboarding Process (Adding SSH Access)
 
@@ -490,33 +319,6 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 - **Azure Integration** - Uses official Azure CLI commands and ARM queries
 
 ## Advanced Features
-
-### 🎯 **Interactive Mode Features** (Primary Strength)
-
-**✨ Zero-Configuration Setup**
-- No command-line parameters required - just run the script
-- Automatically detects and lists your Azure subscriptions
-- Smart filtering shows only relevant resources (resource groups with VMs)
-- Auto-discovery of SSH keys in common locations (`~/.ssh/`)
-
-**🧠 Intelligent User Guidance**
-- **Context-Aware Prompts**: Only shows options relevant to your environment
-- **Multi-Select Support**: Handle multiple VMs with simple `y/n/a` (yes/no/all) selections
-- **Visual Status Indicators**: See VM power state, size, and availability at a glance
-- **Smart Defaults**: Common choices pre-selected to speed up workflow
-
-**🎮 User Experience Excellence**
-- **Guided Workflows**: Step-by-step process eliminates guesswork
-- **Error Prevention**: Validates inputs before execution
-- **Operation Preview**: Shows exactly what will be done before making changes
-- **Flexible Input Methods**: Support for file paths, direct paste, or auto-detection
-- **Progressive Disclosure**: Advanced options available when needed
-
-**📊 Real-Time Feedback**
-- **Live Progress Tracking**: Visual progress bars for multi-VM operations
-- **Instant Validation**: SSH key format and Azure resource validation
-- **Status Updates**: Real-time success/failure indicators during processing
-- **Operation Summaries**: Clear reports of what was accomplished
 
 ### 📊 Progress Tracking & Visual Feedback
 
