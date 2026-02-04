@@ -23,6 +23,7 @@ VM_RESOURCE_GROUP=""
 VM_NAMES=()
 SSH_PUBLIC_KEY=""
 BACKUP_KEYS=true
+BACKUP_KEYS_SET=false  # Track if backup option was explicitly set via command line
 CSV_FILE=""
 
 # Functions
@@ -584,24 +585,10 @@ interactive_get_resource_group() {
     
     # Check if any resource groups with VMs were found
     if [[ ${#resource_groups_with_vms[@]} -eq 0 ]]; then
-        log "WARNING" "No resource groups with VMs found in subscription: $SUBSCRIPTION_ID"
-        echo -e "${YELLOW}No resource groups containing VMs were found.${NC}"
-        echo -n -e "${BLUE}Do you want to enter a resource group name manually? (y/n): ${NC}"
-        read -r continue_choice
-        if [[ "$continue_choice" != "y" && "$continue_choice" != "Y" ]]; then
-            log "INFO" "Operation cancelled by user"
-            exit 0
-        else
-            echo -n -e "${BLUE}Enter resource group name: ${NC}"
-            read -r VM_RESOURCE_GROUP
-            if [[ -n "$VM_RESOURCE_GROUP" ]]; then
-                log "INFO" "Custom resource group entered: $VM_RESOURCE_GROUP"
-                return 0
-            else
-                echo -e "${RED}Resource group name cannot be empty.${NC}"
-                exit 1
-            fi
-        fi
+        log "ERROR" "No resource groups with VMs found in subscription: $SUBSCRIPTION_ID"
+        echo -e "${RED}No resource groups containing VMs were found in this subscription.${NC}"
+        echo -e "${RED}Please ensure VMs exist in your subscription before running this script.${NC}"
+        exit 1
     fi
     
     # Display resource groups with VMs
@@ -623,34 +610,17 @@ interactive_get_resource_group() {
         ((counter++))
     done
     
-    # Add option to enter custom resource group
-    echo -e "${counter}) ${YELLOW}Enter custom resource group name${NC}"
-    echo
-    
     # Prompt for selection
     while true; do
-        echo -n -e "${BLUE}Select resource group (1-${counter}): ${NC}"
+        echo -n -e "${BLUE}Select resource group (1-$((counter-1))): ${NC}"
         read -r selection
         
-        if [[ "$selection" =~ ^[0-9]+$ ]]; then
-            if [[ "$selection" -ge 1 ]] && [[ "$selection" -lt "$counter" ]]; then
-                VM_RESOURCE_GROUP="${resource_group_names[$((selection-1))]}"
-                log "INFO" "Selected resource group: $VM_RESOURCE_GROUP"
-                break
-            elif [[ "$selection" -eq "$counter" ]]; then
-                echo -n -e "${BLUE}Enter resource group name: ${NC}"
-                read -r VM_RESOURCE_GROUP
-                if [[ -n "$VM_RESOURCE_GROUP" ]]; then
-                    log "INFO" "Custom resource group entered: $VM_RESOURCE_GROUP"
-                    break
-                else
-                    echo -e "${RED}Resource group name cannot be empty. Please try again.${NC}"
-                fi
-            else
-                echo -e "${RED}Invalid selection. Please enter a number between 1 and ${counter}.${NC}"
-            fi
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 1 ]] && [[ "$selection" -lt "$counter" ]]; then
+            VM_RESOURCE_GROUP="${resource_group_names[$((selection-1))]}"
+            log "INFO" "Selected resource group: $VM_RESOURCE_GROUP"
+            break
         else
-            echo -e "${RED}Invalid input. Please enter a valid number.${NC}"
+            echo -e "${RED}Invalid selection. Please enter a number between 1 and $((counter-1)).${NC}"
         fi
     done
 }
@@ -689,31 +659,19 @@ interactive_get_vm_names() {
         ((counter++))
     done < <(echo "$vms_json" | jq -c '.[]')
     
-    # Add options for all VMs or custom selection
-    echo -e "${counter}) ${GREEN}Select ALL VMs in resource group${NC}"
-    echo -e "$((counter+1))) ${YELLOW}Enter custom VM names${NC}\n"
+    # Add option for all VMs
+    echo -e "${counter}) ${GREEN}Select ALL VMs in resource group${NC}\n"
     
     # Prompt for selection
     echo -e "${BLUE}You can select multiple VMs by entering numbers separated by commas (e.g., 1,3,5)${NC}"
     while true; do
-        echo -n -e "${BLUE}Select VMs (1-$((counter+1))) or 'all' for all VMs: ${NC}"
+        echo -n -e "${BLUE}Select VMs (1-${counter}) or 'all' for all VMs: ${NC}"
         read -r selection
         
         if [[ "$selection" == "all" || "$selection" == "$counter" ]]; then
             # Select all VMs
             VM_NAMES=("${vm_names_list[@]}")
             log "INFO" "Selected all VMs: ${VM_NAMES[*]}"
-            break
-        elif [[ "$selection" == "$((counter+1))" ]]; then
-            # Custom VM names
-            echo -n -e "${BLUE}Enter VM names separated by commas: ${NC}"
-            read -r custom_vms
-            IFS=',' read -ra VM_NAMES <<< "$custom_vms"
-            # Trim whitespace
-            for i in "${!VM_NAMES[@]}"; do
-                VM_NAMES[i]=$(echo "${VM_NAMES[i]}" | xargs)
-            done
-            log "INFO" "Custom VMs entered: ${VM_NAMES[*]}"
             break
         else
             # Parse comma-separated selections
@@ -1210,9 +1168,6 @@ validate_input_for_row() {
 #################################################################################
 
 main() {
-    # Store original parameter count to detect interactive mode
-    local original_param_count=$#
-    
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -1242,6 +1197,7 @@ main() {
                 ;;
             -n|--no-backup)
                 BACKUP_KEYS=false
+                BACKUP_KEYS_SET=true
                 shift
                 ;;
             -d|--dry-run)
@@ -1267,7 +1223,7 @@ main() {
     # Check prerequisites first
     check_prerequisites
     
-    # Determine mode: CSV file, command line parameters, or interactive
+    # Determine mode: CSV file or interactive/command line parameters
     if [[ -n "$CSV_FILE" ]]; then
         # CSV File Mode
         print_section "CSV File Mode"
@@ -1284,22 +1240,57 @@ main() {
             log "ERROR" "CSV file processing completed with errors"
             exit 1
         fi
-    elif [[ $original_param_count -eq 0 ]]; then
-        # Interactive Mode (no parameters provided)
-        print_section "🔧 Azure VM SSH Key Offboarding - Interactive Mode" "$GREEN"
-        echo -e "${GREEN}Welcome to the interactive SSH key offboarding tool!${NC}"
-        echo "This tool will guide you through removing SSH keys from Azure VMs."
-        echo
-        log "INFO" "Starting interactive mode"
+    else
+        # Interactive/Command Line Mode (handle mixed parameters)
+        print_section "SSH Key Offboarding Setup"
         
-        # Interactive prompts
-        interactive_get_subscription
-        interactive_get_username
-        interactive_get_ssh_key
-        interactive_get_resource_group
-        interactive_get_vm_names
-        interactive_get_backup_confirmation
-        interactive_get_dry_run
+        # Interactive prompts for missing parameters
+        if [[ -z "$SUBSCRIPTION_ID" ]]; then
+            interactive_get_subscription
+        else
+            log "INFO" "Using provided subscription ID: $SUBSCRIPTION_ID"
+        fi
+        
+        if [[ -z "$USER_NAME" ]]; then
+            interactive_get_username
+        else
+            log "INFO" "Using provided username: $USER_NAME"
+        fi
+        
+        if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+            interactive_get_ssh_key
+        else
+            log "INFO" "Using provided SSH key: $SSH_PUBLIC_KEY"
+        fi
+        
+        if [[ -z "$VM_RESOURCE_GROUP" ]]; then
+            interactive_get_resource_group
+        else
+            log "INFO" "Using provided resource group: $VM_RESOURCE_GROUP"
+        fi
+        
+        if [[ ${#VM_NAMES[@]} -eq 0 ]]; then
+            interactive_get_vm_names
+        else
+            log "INFO" "Using provided VM names: ${VM_NAMES[*]}"
+        fi
+        
+        # Ask about backup confirmation unless explicitly set via command line
+        if [[ "$BACKUP_KEYS_SET" == "true" ]]; then
+            log "INFO" "Backup option set via command line (--no-backup): $BACKUP_KEYS"
+        else
+            interactive_get_backup_confirmation
+        fi
+        
+        # Ask about dry-run mode if not already set
+        if [[ "$DRY_RUN" != "true" ]]; then
+            interactive_get_dry_run
+        else
+            log "INFO" "Dry-run mode already enabled via command line"
+        fi
+        
+        # Validate input
+        validate_input
         
         # Validate SSH key
         validate_ssh_key
@@ -1329,26 +1320,6 @@ main() {
         # Remove SSH access from VMs
         current_vm=0
         remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "true" "${VM_NAMES[@]:-}"
-        
-        # Generate summary
-        generate_summary
-    else
-        # Command Line Mode
-        print_section "Command Line Mode"
-        log "INFO" "Processing SSH key offboarding from command line parameters"
-        
-        # Validate input
-        validate_input
-        
-        # Validate SSH key (if provided)
-        validate_ssh_key
-        
-        # Check VM permissions
-        check_vm_permissions "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP"
-        
-        # Remove SSH access from VMs
-        current_vm=0
-        remove_vm_ssh_access "$SUBSCRIPTION_ID" "$VM_RESOURCE_GROUP" "false" "${VM_NAMES[@]:-}"
         
         # Generate summary
         generate_summary
