@@ -1,16 +1,16 @@
 # Azure VM SSH Key Management Scripts
 
-This repository contains two Bash scripts designed to automate the management of SSH keys on Azure Virtual Machines. These scripts focus specifically on adding and removing SSH public keys from the `azroot` account on Azure VMs, supporting both individual command-line operations and batch processing via CSV files.
+This repository contains two Bash scripts designed to automate the management of SSH keys on Azure Virtual Machines. These scripts focus specifically on adding and removing SSH public keys from the `azroot` account on Azure VMs, with **fully interactive guided workflows** that make VM access management simple for both technical and non-technical users.
 
 ## Scripts Overview
 
-### 🔑 `azure_vm_ssh_onboarding.sh`
+### 🔑 `interactive_vm_ssh_onboarding.sh`
 
-Adds SSH public keys to the `azroot` account on specified Azure VMs, enabling secure SSH access for users. When no specific VM names are provided, the script automatically discovers and processes all VMs in the specified resource group.
+Adds SSH public keys to the `azroot` account on specified Azure VMs, enabling secure SSH access for users. Features **intelligent interactive mode** that guides users through subscription selection, resource group discovery, VM selection, and SSH key configuration.
 
-### 🗑️ `azure_vm_ssh_offboarding.sh`  
+### 🗑️ `interactive_vm_ssh_offboarding.sh`  
 
-Removes specific SSH public keys from the `azroot` account on specified Azure VMs, revoking SSH access for users. When no specific VM names are provided, the script automatically discovers and processes all VMs in the specified resource group.
+Removes specific SSH public keys from the `azroot` account on specified Azure VMs, revoking SSH access for users. Includes **interactive backup management** and **guided SSH key selection** for safe access removal.
 
 ## Prerequisites
 
@@ -24,26 +24,153 @@ Before using these scripts, ensure you have:
 
 ## Usage Modes
 
-Both scripts support two operation modes:
+Both scripts support three flexible operation modes:
 
-### 1. Command Line Mode
+### 1. 🎯 **Interactive Mode** (Recommended)
 
-Direct parameter specification for single or multiple operations.
+**Run without any parameters** for a fully guided experience:
+- **Smart subscription selection** from your available Azure subscriptions
+- **Filtered resource group selection** (shows only groups containing VMs)
+- **Multi-select VM management** with visual confirmation
+- **Flexible SSH key input** (file path, direct paste, or auto-discovery)
+- **Visual progress tracking** with real-time status updates
+- **Intelligent confirmation prompts** with operation summaries
 
-### 2. CSV File Mode  
+### 2. Command Line Mode
 
-Batch processing using CSV files containing multiple operations.
+Direct parameter specification for scripted or advanced operations.
 
-## 🔑 SSH Onboarding Script Usage
+### 3. CSV File Mode  
 
-### Basic Syntax
+Batch processing using CSV files for bulk user management operations.
+
+## 🚀 Getting Started - Interactive Mode (Recommended)
+
+**The easiest way to use these scripts is to simply run them without any parameters:**
 
 ```bash
-# Command line mode
-./azure_vm_ssh_onboarding.sh -u <username> -s <subscription_id> -k <ssh_public_key> -g <vm_resource_group> -v <vm_name> [OPTIONS]
+# For onboarding (adding SSH access)
+./interactive_vm_ssh_onboarding.sh
 
-# CSV file mode
-./azure_vm_ssh_onboarding.sh -f <csv_file> [OPTIONS]
+# For offboarding (removing SSH access)  
+./interactive_vm_ssh_offboarding.sh
+```
+
+### Why Interactive Mode?
+
+**🎯 Perfect for All Skill Levels**
+- **No Azure expertise required** - the script guides you through everything
+- **No memorizing command-line parameters** - all options presented clearly
+- **Visual confirmation** of selections before execution
+- **Error prevention** through validation and smart defaults
+
+**⚡ Faster and More Reliable**
+- **Auto-discovery** of subscriptions, resource groups, and VMs
+- **Real-time validation** of inputs and Azure resources  
+- **Multi-select capabilities** for batch operations on multiple VMs
+- **Progress tracking** with visual feedback during operations
+
+**🛡️ Safer Operations**
+- **Preview mode** shows exactly what will be done before execution
+- **Confirmation prompts** prevent accidental changes
+- **Intelligent filtering** shows only relevant resources (running VMs, etc.)
+- **Backup management** with guided prompts for offboarding operations
+
+---
+
+## 🎯 Interactive Mode (Easiest Way to Get Started)
+
+Both scripts are designed to be **fully interactive** when run without parameters. This is the recommended approach for most users:
+
+```bash
+# Simply run the script without any parameters
+./interactive_vm_ssh_onboarding.sh
+
+# Or for offboarding
+./interactive_vm_ssh_offboarding.sh
+```
+
+### What Interactive Mode Provides:
+
+**🔍 Intelligent Azure Discovery**
+- Automatically lists your available Azure subscriptions
+- Filters and displays only resource groups containing VMs
+- Shows VM status, power state, and key details for informed selection
+
+**🎮 User-Friendly Selection Process**
+- **Subscription Selection**: Choose from a numbered list of your subscriptions
+- **Resource Group Selection**: See only resource groups that actually contain VMs
+- **VM Selection**: Multi-select interface with `[y/n/a]` options (Yes/No/All)
+- **SSH Key Configuration**: Multiple input methods with smart defaults
+
+**📋 Visual Progress and Confirmation**
+- **Operation Summary**: Clear preview of what will be done before execution
+- **Progress Indicators**: Real-time status updates during multi-VM operations
+- **Color-coded Output**: Green for success, red for errors, yellow for warnings
+- **Final Confirmation**: Detailed summary with confirmation prompt before execution
+
+**🔧 Flexible SSH Key Handling**
+- **File Path Input**: Browse to your SSH key file (`~/.ssh/id_rsa.pub`)
+- **Direct Key Paste**: Copy and paste SSH key content directly
+- **Auto-detection**: Script can find common SSH key locations
+- **Key Validation**: Real-time validation of SSH key format and type
+
+### Interactive Mode Flow Example:
+
+```
+🔐 Azure VM SSH Key Onboarding - Interactive Mode
+================================================
+
+✅ Step 1: Azure Subscription Selection
+   Available subscriptions:
+   [1] Production Environment (12345678-1234-1234-1234-123456789012)
+   [2] Development Environment (87654321-4321-4321-4321-210987654321)
+   [3] Staging Environment (11111111-2222-3333-4444-555555555555)
+   
+   Select subscription [1-3]: 1
+
+✅ Step 2: Resource Group Selection  
+   Resource groups with VMs:
+   [1] web-servers-rg (3 VMs)
+   [2] database-servers-rg (2 VMs) 
+   [3] app-servers-rg (4 VMs)
+   
+   Select resource group [1-3]: 1
+
+✅ Step 3: VM Selection
+   Available VMs in 'web-servers-rg':
+   [1] web-01 (Running) - Standard_B2s
+   [2] web-02 (Running) - Standard_B2s  
+   [3] web-03 (Stopped) - Standard_B2s [SKIPPED - Not Running]
+   
+   Select VMs:
+   Process web-01? [y/n/a]: y
+   Process web-02? [y/n/a]: y
+   
+   Selected VMs: web-01, web-02
+
+✅ Step 4: SSH Key Configuration
+   [1] Use default key (~/.ssh/id_rsa.pub)
+   [2] Specify custom key file path
+   [3] Paste SSH key content directly
+   
+   Choose SSH key method [1-3]: 1
+   ✅ Found valid SSH key: ssh-rsa AAAAB3NzaC1... user@hostname
+
+✅ Step 5: Operation Summary
+   Username: john.doe
+   Subscription: Production Environment
+   Resource Group: web-servers-rg
+   Target VMs: web-01, web-02
+   SSH Key: ~/.ssh/id_rsa.pub (RSA 2048-bit)
+   
+   Proceed with onboarding? [y/N]: y
+
+🚀 Processing VMs...
+   ✅ web-01: SSH key added successfully
+   ✅ web-02: SSH key added successfully
+   
+   Operation completed: 2/2 VMs processed successfully
 ```
 
 ### Parameters
@@ -67,7 +194,7 @@ Batch processing using CSV files containing multiple operations.
 #### Add SSH key to a single VM
 
 ```bash
-./azure_vm_ssh_onboarding.sh \
+./interactive_vm_ssh_onboarding.sh \
   -u john.doe \
   -s "12345678-1234-1234-1234-123456789012" \
   -k ~/.ssh/id_rsa.pub \
@@ -78,7 +205,7 @@ Batch processing using CSV files containing multiple operations.
 #### Add SSH key to multiple VMs
 
 ```bash
-./azure_vm_ssh_onboarding.sh \
+./interactive_vm_ssh_onboarding.sh \
   -u jane.smith \
   -s "12345678-1234-1234-1234-123456789012" \
   -k ~/.ssh/id_rsa.pub \
@@ -89,7 +216,7 @@ Batch processing using CSV files containing multiple operations.
 #### Add SSH key to all VMs in resource group (auto-discovery)
 
 ```bash
-./azure_vm_ssh_onboarding.sh \
+./interactive_vm_ssh_onboarding.sh \
   -u jane.smith \
   -s "87654321-4321-4321-4321-210987654321" \
   -k ~/.ssh/jane_key.pub \
@@ -100,7 +227,7 @@ Batch processing using CSV files containing multiple operations.
 #### Dry run to preview changes
 
 ```bash
-./azure_vm_ssh_onboarding.sh \
+./interactive_vm_ssh_onboarding.sh \
   -u john.doe \
   -s "12345678-1234-1234-1234-123456789012" \
   -k ~/.ssh/id_rsa.pub \
@@ -114,7 +241,7 @@ Batch processing using CSV files containing multiple operations.
 #### Using SSH key content directly
 
 ```bash
-./azure_vm_ssh_onboarding.sh \
+./interactive_vm_ssh_onboarding.sh \
   -u john.doe \
   -s "12345678-1234-1234-1234-123456789012" \
   -k "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..." \
@@ -125,13 +252,13 @@ Batch processing using CSV files containing multiple operations.
 #### Batch processing with CSV file
 
 ```bash
-./azure_vm_ssh_onboarding.sh -f onboarding_batch.csv
+./interactive_vm_ssh_onboarding.sh -f onboarding_batch.csv
 ```
 
 #### CSV file with dry run
 
 ```bash
-./azure_vm_ssh_onboarding.sh -f onboarding_batch.csv -d
+./interactive_vm_ssh_onboarding.sh -f onboarding_batch.csv -d
 ```
 
 ### CSV File Format for Onboarding
@@ -157,14 +284,31 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 
 ## 🗑️ SSH Offboarding Script Usage
 
-### Basic Syntax
+### Quick Start (Interactive Mode)
 
 ```bash
-# Command line mode
-./azure_vm_ssh_offboarding.sh -u <username> -s <subscription_id> -g <vm_resource_group> -v <vm_name> [OPTIONS]
+# Just run the script - no parameters needed!
+./interactive_vm_ssh_offboarding.sh
+```
+The script will interactively guide you through:
+- Subscription and resource group selection  
+- VM selection with status validation
+- SSH key identification (file or direct input)
+- Backup confirmation (with smart defaults)
+- Operation preview and confirmation
 
-# CSV file mode
-./azure_vm_ssh_offboarding.sh -f <csv_file> [OPTIONS]
+### Advanced: Command Line Mode
+
+```bash
+# Command line mode for scripting/automation
+./interactive_vm_ssh_offboarding.sh -u <username> -s <subscription_id> -k <ssh_public_key> -g <vm_resource_group> -v <vm_name> [OPTIONS]
+
+# CSV file mode for batch operations
+./interactive_vm_ssh_offboarding.sh -f <csv_file> [OPTIONS]
+```
+
+# CSV file mode for batch operations
+./interactive_vm_ssh_onboarding.sh -f <csv_file> [OPTIONS]
 ```
 
 ### Parameters
@@ -189,7 +333,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 #### Remove specific SSH key from a single VM
 
 ```bash
-./azure_vm_ssh_offboarding.sh \
+./interactive_vm_ssh_offboarding.sh \
   -u john.doe \
   -s "12345678-1234-1234-1234-123456789012" \
   -k ~/.ssh/id_rsa.pub \
@@ -200,7 +344,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 #### Remove specific key from multiple VMs
 
 ```bash
-./azure_vm_ssh_offboarding.sh \
+./interactive_vm_ssh_offboarding.sh \
   -u jane.smith \
   -s "12345678-1234-1234-1234-123456789012" \
   -k ~/.ssh/jane_key.pub \
@@ -211,7 +355,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 #### Remove specific key from all VMs in resource group (auto-discovery)
 
 ```bash
-./azure_vm_ssh_offboarding.sh \
+./interactive_vm_ssh_offboarding.sh \
   -u jane.smith \
   -s "87654321-4321-4321-4321-210987654321" \
   -k ~/.ssh/jane_key.pub \
@@ -222,7 +366,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 #### Remove specific key without backup
 
 ```bash
-./azure_vm_ssh_offboarding.sh \
+./interactive_vm_ssh_offboarding.sh \
   -u john.doe \
   -s "12345678-1234-1234-1234-123456789012" \
   -k ~/.ssh/id_rsa.pub \
@@ -234,7 +378,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 #### Dry run to preview changes
 
 ```bash
-./azure_vm_ssh_offboarding.sh \
+./interactive_vm_ssh_offboarding.sh \
   -u john.doe \
   -s "12345678-1234-1234-1234-123456789012" \
   -k ~/.ssh/id_rsa.pub \
@@ -246,13 +390,13 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,
 #### Batch processing with CSV file
 
 ```bash
-./azure_vm_ssh_offboarding.sh -f offboarding_batch.csv
+./interactive_vm_ssh_offboarding.sh -f offboarding_batch.csv
 ```
 
 #### CSV file with dry run
 
 ```bash
-./azure_vm_ssh_offboarding.sh -f offboarding_batch.csv -d
+./interactive_vm_ssh_offboarding.sh -f offboarding_batch.csv -d
 ```
 
 *Note: Dry run mode bypasses confirmation prompts and shows what changes would be made*
@@ -281,13 +425,36 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 
 ## How It Works
 
-### Onboarding Process
+### Interactive Mode Process (Recommended)
 
-1. **Input Processing** - Parses command line parameters or CSV file content
+**🎮 User-Driven Workflow:**
+1. **Script Launch** - Simply run without parameters for guided experience
+2. **Azure Discovery** - Automatic detection of subscriptions and Azure resources
+3. **Interactive Selection** - User-friendly menus for subscription, resource group, and VM selection
+4. **Smart Configuration** - Flexible SSH key input with validation and auto-detection
+5. **Operation Preview** - Clear summary of planned actions with user confirmation
+6. **Execution with Feedback** - Real-time progress tracking and visual status updates
+7. **Result Summary** - Detailed report of successful/failed operations
+
+**Key Interactive Features:**
+- **Auto-Discovery**: Finds and lists your Azure resources automatically
+- **Smart Filtering**: Shows only relevant options (running VMs, resource groups with VMs)
+- **Multi-Select Support**: Handle multiple VMs with simple y/n/a prompts
+- **Input Validation**: Real-time checking of SSH keys and Azure resources
+- **Visual Feedback**: Color-coded progress indicators and status updates
+
+### Command Line Mode Process (Advanced)
+
+**⚙️ Automated Workflow:**
+
+### Onboarding Process (Adding SSH Access)
+
+1. **Input Processing** - Handles command line parameters, CSV file content, or interactive prompts
 2. **Prerequisites Check** - Verifies Azure CLI installation and login status
 3. **Input Validation** - Validates all parameters and SSH key format
 4. **Azure Authentication** - Sets active subscription and verifies resource group access
-5. **Batch Processing** - For each row (CSV mode) or single operation (command line):
+5. **Resource Discovery** - Auto-discovers VMs when not explicitly specified (interactive + command line)
+6. **Batch Processing** - For each target VM:
    - **VM Status Check** - Verifies each VM exists and has `PowerState/running` status
    - **Progress Tracking** - Displays real-time progress with colored status indicators
    - **SSH Key Management** - Uses `az vm run-command` to execute secure scripts on VMs
@@ -296,13 +463,14 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
    - **Duplicate Prevention** - Checks if key already exists before adding
    - **Operation Summary** - Provides success/failure reporting
 
-### Offboarding Process
+### Offboarding Process (Removing SSH Access)
 
-1. **Input Processing** - Parses command line parameters or CSV file content
+1. **Input Processing** - Handles command line parameters, CSV file content, or interactive prompts  
 2. **Prerequisites Check** - Verifies Azure CLI installation and login status
 3. **Input Validation** - Validates parameters and SSH key format (if specific key removal)
 4. **Azure Authentication** - Sets active subscription and verifies resource group access
-5. **Batch Processing** - For each row (CSV mode) or single operation (command line):
+5. **Resource Discovery** - Auto-discovers VMs when not explicitly specified (interactive + command line)
+6. **Batch Processing** - For each target VM:
    - **VM Status Check** - Verifies each VM exists and has `PowerState/running` status
    - **Progress Tracking** - Displays real-time progress with colored status indicators
    - **Backup Creation** - Creates timestamped backup of `authorized_keys` (unless disabled)
@@ -322,6 +490,33 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 - **Azure Integration** - Uses official Azure CLI commands and ARM queries
 
 ## Advanced Features
+
+### 🎯 **Interactive Mode Features** (Primary Strength)
+
+**✨ Zero-Configuration Setup**
+- No command-line parameters required - just run the script
+- Automatically detects and lists your Azure subscriptions
+- Smart filtering shows only relevant resources (resource groups with VMs)
+- Auto-discovery of SSH keys in common locations (`~/.ssh/`)
+
+**🧠 Intelligent User Guidance**
+- **Context-Aware Prompts**: Only shows options relevant to your environment
+- **Multi-Select Support**: Handle multiple VMs with simple `y/n/a` (yes/no/all) selections
+- **Visual Status Indicators**: See VM power state, size, and availability at a glance
+- **Smart Defaults**: Common choices pre-selected to speed up workflow
+
+**🎮 User Experience Excellence**
+- **Guided Workflows**: Step-by-step process eliminates guesswork
+- **Error Prevention**: Validates inputs before execution
+- **Operation Preview**: Shows exactly what will be done before making changes
+- **Flexible Input Methods**: Support for file paths, direct paste, or auto-detection
+- **Progressive Disclosure**: Advanced options available when needed
+
+**📊 Real-Time Feedback**
+- **Live Progress Tracking**: Visual progress bars for multi-VM operations
+- **Instant Validation**: SSH key format and Azure resource validation
+- **Status Updates**: Real-time success/failure indicators during processing
+- **Operation Summaries**: Clear reports of what was accomplished
 
 ### 📊 Progress Tracking & Visual Feedback
 
@@ -398,11 +593,22 @@ Log entries include:
 
 ### 🎯 Operational Best Practices
 
-1. **Always test first** - Use dry run mode (`-d`) before actual execution
-2. **Keep logs** - Review log files for operation status and troubleshooting
-3. **Backup strategy** - Keep backups enabled for offboarding operations
-4. **Principle of least privilege** - Use minimal required Azure permissions
-5. **Regular audits** - Periodically review SSH access on VMs
+1. **Start with Interactive Mode** - Use guided mode for learning and one-time operations
+   - **New users**: Interactive mode eliminates learning curve and prevents mistakes
+   - **Troubleshooting**: Interactive validation helps identify issues quickly
+   - **Exploration**: Discover available resources without prior knowledge of structure
+   - **Safety**: Built-in confirmations prevent accidental operations
+
+2. **Choose the Right Mode for Your Task**
+   - **Interactive Mode**: One-time operations, learning, troubleshooting, exploration
+   - **Command Line Mode**: Scripting, automation, CI/CD integration
+   - **CSV File Mode**: Bulk operations, user lifecycle management, regular batch processing
+
+3. **Always test first** - Use dry run mode (`-d`) before actual execution
+4. **Keep logs** - Review log files for operation status and troubleshooting
+5. **Backup strategy** - Keep backups enabled for offboarding operations
+6. **Principle of least privilege** - Use minimal required Azure permissions
+7. **Regular audits** - Periodically review SSH access on VMs
 
 ### 🛠️ Technical Best Practices
 
