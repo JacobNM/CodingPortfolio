@@ -29,6 +29,7 @@ Both scripts support flexible operation modes with **mixed interactivity**:
 ### 1. 🎯 **Fully Interactive Mode** (Recommended)
 
 **Run without any parameters** for a completely guided experience:
+
 - **Smart subscription selection** from your available Azure subscriptions
 - **Filtered resource group selection** (shows only groups containing VMs)
 - **Multi-select VM management** with visual confirmation
@@ -39,6 +40,7 @@ Both scripts support flexible operation modes with **mixed interactivity**:
 ### 2. 🔄 **Mixed Interactive Mode** (Best of Both Worlds)
 
 **Provide some parameters via command line, script prompts for the rest**:
+
 - Specify known parameters (subscription, username, SSH key) on command line
 - Script automatically prompts for missing required parameters
 - Seamless transition between automated and interactive input
@@ -91,27 +93,30 @@ Batch processing using CSV files for bulk user management operations.
 
 **🔄 Flexible Workflow** - Mix command-line parameters with interactive prompts for optimal efficiency
 
-### What You Get:
+### What You Get
 
 **🎮 User-Friendly Selection Process**
+
 - **Subscription Selection**: Choose from a numbered list of your subscriptions
 - **Resource Group Selection**: Automatically shows only resource groups that contain VMs
 - **VM Selection**: Multi-select interface with `[y/n/a]` options (Yes/No/All)
 - **SSH Key Configuration**: Multiple input methods with smart defaults
 
 **📋 Visual Progress and Confirmation**
+
 - **Operation Summary**: Clear preview of what will be done before execution
 - **Progress Indicators**: Real-time status updates during multi-VM operations
 - **Color-coded Output**: Green for success, red for errors, yellow for warnings
 - **Final Confirmation**: Detailed summary with confirmation prompt before execution
 
 **🔧 Flexible SSH Key Handling**
+
 - **File Path Input**: Browse to your SSH key file (`~/.ssh/id_rsa.pub`)
 - **Direct Key Paste**: Copy and paste SSH key content directly
 - **Auto-detection**: Script can find common SSH key locations
 - **Key Validation**: Real-time validation of SSH key format and type
 
-### Interactive Mode Flow Example:
+### Interactive Mode Flow Example
 
 ```
 🔐 Azure VM SSH Key Onboarding - Mixed Interactive Mode
@@ -244,6 +249,7 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 ```
 
 **CSV Requirements:**
+
 - Header row is required and must match exactly
 - Multiple VM names should be comma-separated within quotes: `"vm01,vm02,vm03"`
 - Leave `vm_names` empty for auto-discovery of all VMs in the resource group
@@ -258,7 +264,9 @@ sara.jones,22222222-3333-4444-5555-666666666666,~/.ssh/sara_key.pub,staging-rg,,
 # Just run the script - no parameters needed!
 ./interactive_vm_ssh_offboarding.sh
 ```
+
 The script will interactively guide you through:
+
 - Subscription and resource group selection  
 - VM selection with status validation
 - SSH key identification (file or direct input)
