@@ -2,51 +2,36 @@
 
 %% This diagram illustrates the validation process for ensuring connectivity from Snowflake to the Staging MySQL database through a proxy, with all acceptance criteria and validation steps.
 
-flowchart TD
+flowchart LR
     %% Main Components
     SF["🏔️ Snowflake"]
-    PROXY[("🛡️ Staging Proxy<br/>Endpoint")]
-    MYSQL[("🗄️ Staging MySQL<br/>Database")]
-    DIRECT[("❌ Direct Public<br/>DB Access")]
+    PROXY[("🛡️ Staging Proxy")]
+    MYSQL[("🗄️ MySQL DB")]
+    DIRECT[("❌ Direct Access")]
     
-    %% Validation Process
-    START(("🚀 Start<br/>Validation"))
-    CONFIG{"⚙️ Configure<br/>Snowflake Connection"}
-    TEST_CONN{"🔌 Test<br/>Connection"}
-    CONN_SUCCESS{"✅ Connection<br/>Successful?"}
-    READ_WRITE{"📖📝 Test Read/Write<br/>Operations"}
-    RW_SUCCESS{"✅ Read/Write<br/>Working?"}
-    STABILITY{"🔄 Test Connection<br/>Stability"}
-    STABLE_SUCCESS{"✅ Stable<br/>Connection?"}
-    DOCUMENT{"📋 Document<br/>Findings"}
-    PROD_READY{"🎯 Production<br/>Ready?"}
-    END_SUCCESS(("✅ Validation<br/>Complete"))
-    END_FAIL(("❌ Validation<br/>Failed"))
+    %% Validation Process - Compact Layout
+    START(("🚀 Start")) --> CONFIG{"⚙️ Configure"}
+    CONFIG --> TEST{"🔌 Test Connection"}
+    TEST --> CONN_OK{"✅ Connected?"}
     
-    %% Connection Flow
-    START --> CONFIG
-    CONFIG --> TEST_CONN
-    SF -.->|"Traffic flows through proxy only"| PROXY
+    CONN_OK -->|"Yes"| RW_TEST{"📖📝 R/W Test"}
+    CONN_OK -->|"No"| FAIL(("❌ Failed"))
+    
+    RW_TEST -->|"✅ Pass"| STABLE{"🔄 Stability Test"}
+    RW_TEST -->|"❌ Fail"| FAIL
+    
+    STABLE -->|"✅ Stable"| DOC{"📋 Document"}
+    STABLE -->|"❌ Unstable"| FAIL
+    
+    DOC --> READY{"🎯 Prod Ready?"}
+    READY -->|"✅ Yes"| SUCCESS(("✅ Complete"))
+    READY -->|"⚠️ Needs Tuning"| FAIL
+    
+    %% Connection Architecture (Parallel)
+    SF -.->|"✅ Via Proxy"| PROXY
     PROXY --> MYSQL
-    SF -.->|"❌ Must NOT use"| DIRECT
-    DIRECT -.->|"❌ Blocked"| MYSQL
-    
-    %% Validation Flow
-    TEST_CONN --> CONN_SUCCESS
-    CONN_SUCCESS -->|"Yes"| READ_WRITE
-    CONN_SUCCESS -->|"No"| END_FAIL
-    
-    READ_WRITE --> RW_SUCCESS
-    RW_SUCCESS -->|"Yes"| STABILITY
-    RW_SUCCESS -->|"No"| END_FAIL
-    
-    STABILITY --> STABLE_SUCCESS
-    STABLE_SUCCESS -->|"Yes"| DOCUMENT
-    STABLE_SUCCESS -->|"No"| END_FAIL
-    
-    DOCUMENT --> PROD_READY
-    PROD_READY -->|"Yes"| END_SUCCESS
-    PROD_READY -->|"No - needs tuning"| END_FAIL
+    SF -.->|"❌ Blocked"| DIRECT
+    DIRECT -.->|"❌ No Access"| MYSQL
            
     %% Styling
     classDef success fill:#d4edda,stroke:#155724,stroke-width:2px,color:#155724
@@ -57,13 +42,12 @@ flowchart TD
     classDef criteria fill:#fff3cd,stroke:#856404,stroke-width:2px,color:#856404
     
     %% Apply styles
-    class END_SUCCESS success
-    class END_FAIL failure
-    class START,CONFIG,TEST_CONN,READ_WRITE,STABILITY,DOCUMENT process
-    class CONN_SUCCESS,RW_SUCCESS,STABLE_SUCCESS,PROD_READY process
+    class SUCCESS success
+    class FAIL failure
+    class START,CONFIG,TEST,DOC process
+    class CONN_OK,RW_TEST,STABLE,READY process
     class SF,PROXY,MYSQL component
     class DIRECT blocked
-    class AC1,AC2,AC3,AC4,AC5,AC6,AC7,DOC1,DOC2,DOC3,DOC4,DOC5 criteria
 
 %% ## Key Points
 
