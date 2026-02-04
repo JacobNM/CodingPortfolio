@@ -24,11 +24,11 @@ Before using these scripts, ensure you have:
 
 ## Usage Modes
 
-Both scripts support three flexible operation modes:
+Both scripts support flexible operation modes with **mixed interactivity**:
 
-### 1. 🎯 **Interactive Mode** (Recommended)
+### 1. 🎯 **Fully Interactive Mode** (Recommended)
 
-**Run without any parameters** for a fully guided experience:
+**Run without any parameters** for a completely guided experience:
 - **Smart subscription selection** from your available Azure subscriptions
 - **Filtered resource group selection** (shows only groups containing VMs)
 - **Multi-select VM management** with visual confirmation
@@ -36,17 +36,27 @@ Both scripts support three flexible operation modes:
 - **Visual progress tracking** with real-time status updates
 - **Intelligent confirmation prompts** with operation summaries
 
-### 2. Command Line Mode
+### 2. 🔄 **Mixed Interactive Mode** (Best of Both Worlds)
 
-Direct parameter specification for scripted or advanced operations.
+**Provide some parameters via command line, script prompts for the rest**:
+- Specify known parameters (subscription, username, SSH key) on command line
+- Script automatically prompts for missing required parameters
+- Seamless transition between automated and interactive input
+- Perfect for partial automation while maintaining flexibility
 
-### 3. CSV File Mode  
+### 3. 📝 **Full Command Line Mode**
+
+Direct specification of all parameters for complete automation.
+
+### 4. 📊 **CSV File Mode**  
 
 Batch processing using CSV files for bulk user management operations.
 
-## 🎯 Interactive Mode (Recommended - Easiest Way to Get Started)
+## 🎯 Interactive Modes (Recommended - Easiest Way to Get Started)
 
-**Simply run without parameters for a fully guided experience:**
+### Fully Interactive Mode
+
+**Simply run without parameters for a completely guided experience:**
 
 ```bash
 # For onboarding (adding SSH access)
@@ -56,19 +66,36 @@ Batch processing using CSV files for bulk user management operations.
 ./interactive_vm_ssh_offboarding.sh
 ```
 
-### Why Interactive Mode?
+### Mixed Interactive Mode
+
+**Provide some parameters, let the script handle the rest interactively:**
+
+```bash
+# Specify user and subscription, script prompts for resource group and VMs
+./interactive_vm_ssh_onboarding.sh -u john.doe -s "12345678-1234-1234-1234-123456789012"
+
+# Specify user and SSH key, script prompts for subscription and resources
+./interactive_vm_ssh_onboarding.sh -u john.doe -k ~/.ssh/id_rsa.pub
+
+# Specify subscription and resource group, script prompts for user, SSH key, and VMs
+./interactive_vm_ssh_onboarding.sh -s "subscription-id" -g "resource-group-name"
+```
+
+### Why Interactive Modes?
 
 **🎯 Perfect for All Users** - No Azure expertise required, visual confirmation, error prevention through validation
 
-**⚡ Smart & Efficient** - Auto-discovery of resources, real-time validation, multi-select capabilities, progress tracking
+**⚡ Smart & Efficient** - Automatic resource discovery, real-time validation, multi-select capabilities, progress tracking
 
-**🛡️ Safe Operations** - Preview mode, confirmation prompts, intelligent filtering, guided backup management
+**🛡️ Safe Operations** - Preview mode, confirmation prompts, works only with verified existing resources
+
+**🔄 Flexible Workflow** - Mix command-line parameters with interactive prompts for optimal efficiency
 
 ### What You Get:
 
 **🎮 User-Friendly Selection Process**
 - **Subscription Selection**: Choose from a numbered list of your subscriptions
-- **Resource Group Selection**: See only resource groups that actually contain VMs
+- **Resource Group Selection**: Automatically shows only resource groups that contain VMs
 - **VM Selection**: Multi-select interface with `[y/n/a]` options (Yes/No/All)
 - **SSH Key Configuration**: Multiple input methods with smart defaults
 
@@ -87,19 +114,27 @@ Batch processing using CSV files for bulk user management operations.
 ### Interactive Mode Flow Example:
 
 ```
-🔐 Azure VM SSH Key Onboarding - Interactive Mode
-================================================
+🔐 Azure VM SSH Key Onboarding - Mixed Interactive Mode
+=====================================================
 
-✅ Step 1: Azure Subscription Selection
-   Available subscriptions:
-   [1] Production Environment (12345678-1234-1234-1234-123456789012)
-   [2] Development Environment (87654321-4321-4321-4321-210987654321)
-   [3] Staging Environment (11111111-2222-3333-4444-555555555555)
+Command: ./interactive_vm_ssh_onboarding.sh -u john.doe -s "12345678-1234-1234-1234-123456789012"
+
+✅ Parameters Provided:
+   • Username: john.doe
+   • Subscription: 12345678-1234-1234-1234-123456789012
+
+🔍 Missing Parameters - Interactive Mode Activated
+
+✅ Step 1: SSH Key Configuration
+   [1] Use default key (~/.ssh/id_rsa.pub)
+   [2] Specify custom key file path
+   [3] Paste SSH key content directly
    
-   Select subscription [1-3]: 1
+   Choose SSH key method [1-3]: 1
+   ✅ Found valid SSH key: ssh-rsa AAAAB3NzaC1... john.doe@hostname
 
 ✅ Step 2: Resource Group Selection  
-   Resource groups with VMs:
+   Resource groups with VMs in subscription:
    [1] web-servers-rg (3 VMs)
    [2] database-servers-rg (2 VMs) 
    [3] app-servers-rg (4 VMs)
@@ -118,17 +153,9 @@ Batch processing using CSV files for bulk user management operations.
    
    Selected VMs: web-01, web-02
 
-✅ Step 4: SSH Key Configuration
-   [1] Use default key (~/.ssh/id_rsa.pub)
-   [2] Specify custom key file path
-   [3] Paste SSH key content directly
-   
-   Choose SSH key method [1-3]: 1
-   ✅ Found valid SSH key: ssh-rsa AAAAB3NzaC1... user@hostname
-
-✅ Step 5: Operation Summary
+✅ Step 4: Operation Summary
    Username: john.doe
-   Subscription: Production Environment
+   Subscription: 12345678-1234-1234-1234-123456789012
    Resource Group: web-servers-rg
    Target VMs: web-01, web-02
    SSH Key: ~/.ssh/id_rsa.pub (RSA 2048-bit)
@@ -402,8 +429,9 @@ Log entries include:
    - **Safety**: Built-in confirmations prevent accidental operations
 
 2. **Choose the Right Mode for Your Task**
-   - **Interactive Mode**: One-time operations, learning, troubleshooting, exploration
-   - **Command Line Mode**: Scripting, automation, CI/CD integration
+   - **Fully Interactive Mode**: Learning, exploration, one-time operations, when you need to see all available options
+   - **Mixed Interactive Mode**: Partial automation with interactive validation, when you know some parameters but want guidance for others
+   - **Full Command Line Mode**: Complete automation, scripting, CI/CD integration
    - **CSV File Mode**: Bulk operations, user lifecycle management, regular batch processing
 
 3. **Always test first** - Use dry run mode (`-d`) before actual execution
@@ -471,6 +499,17 @@ az vm list -g "resource-group-name" -d --output table
 az vm show -g "resource-group-name" -n "vm-name" -d --query "powerState"
 # Start VM if needed
 az vm start -g "resource-group-name" -n "vm-name"
+```
+
+#### "No resource groups with VMs found"
+
+```bash
+# Solution: Verify VMs exist in your subscription
+az vm list --subscription "subscription-id" --output table
+# Check if you have access to VM resources
+az vm list --subscription "subscription-id" --query "[].resourceGroup" -o tsv | sort -u
+# Ensure you have appropriate permissions
+az role assignment list --assignee $(az account show --query user.name -o tsv) --subscription "subscription-id"
 ```
 
 #### "Invalid SSH public key format"
