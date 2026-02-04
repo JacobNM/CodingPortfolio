@@ -1,0 +1,118 @@
+# Snowflake to MySQL Connectivity Validation via Proxy
+
+This diagram illustrates the validation process for ensuring connectivity from Snowflake to the Staging MySQL database through a proxy, with all acceptance criteria and validation steps.
+
+```mermaid
+flowchart TD
+    %% Main Components
+    SF["🏔️ Snowflake"]
+    PROXY[("🛡️ Staging Proxy<br/>Endpoint")]
+    MYSQL[("🗄️ Staging MySQL<br/>Database")]
+    DIRECT[("❌ Direct Public<br/>DB Access")]
+    
+    %% Validation Process
+    START(("🚀 Start<br/>Validation"))
+    CONFIG{"⚙️ Configure<br/>Snowflake Connection"}
+    TEST_CONN{"🔌 Test<br/>Connection"}
+    CONN_SUCCESS{"✅ Connection<br/>Successful?"}
+    READ_WRITE{"📖📝 Test Read/Write<br/>Operations"}
+    RW_SUCCESS{"✅ Read/Write<br/>Working?"}
+    STABILITY{"🔄 Test Connection<br/>Stability"}
+    STABLE_SUCCESS{"✅ Stable<br/>Connection?"}
+    DOCUMENT{"📋 Document<br/>Findings"}
+    PROD_READY{"🎯 Production<br/>Ready?"}
+    END_SUCCESS(("✅ Validation<br/>Complete"))
+    END_FAIL(("❌ Validation<br/>Failed"))
+    
+    %% Connection Flow
+    START --> CONFIG
+    CONFIG --> TEST_CONN
+    SF -.->|"Traffic flows through proxy only"| PROXY
+    PROXY --> MYSQL
+    SF -.->|"❌ Must NOT use"| DIRECT
+    DIRECT -.->|"❌ Blocked"| MYSQL
+    
+    %% Validation Flow
+    TEST_CONN --> CONN_SUCCESS
+    CONN_SUCCESS -->|"Yes"| READ_WRITE
+    CONN_SUCCESS -->|"No"| END_FAIL
+    
+    READ_WRITE --> RW_SUCCESS
+    RW_SUCCESS -->|"Yes"| STABILITY
+    RW_SUCCESS -->|"No"| END_FAIL
+    
+    STABILITY --> STABLE_SUCCESS
+    STABLE_SUCCESS -->|"Yes"| DOCUMENT
+    STABLE_SUCCESS -->|"No"| END_FAIL
+    
+    DOCUMENT --> PROD_READY
+    PROD_READY -->|"Yes"| END_SUCCESS
+    PROD_READY -->|"No - needs tuning"| END_FAIL
+    
+    %% Subgraph for Acceptance Criteria
+    subgraph CRITERIA ["🎯 Acceptance Criteria"]
+        direction TB
+        AC1["✅ Reliable connection to MySQL"]
+        AC2["✅ No direct public DB access"]
+        AC3["✅ Successful connection achieved"]
+        AC4["✅ Basic read/write validated"]
+        AC5["✅ Stable connection confirmed"]
+        AC6["📄 Findings documented"]
+        AC7["⚠️ Quirks/limits captured"]
+    end
+    
+    %% Subgraph for Documentation Requirements
+    subgraph DOCS ["📋 Documentation Requirements"]
+        direction TB
+        DOC1["Connection configuration"]
+        DOC2["Performance metrics"]
+        DOC3["Connection quirks/limits"]
+        DOC4["Tuning recommendations"]
+        DOC5["Production readiness assessment"]
+    end
+    
+    %% Styling
+    classDef success fill:#d4edda,stroke:#155724,stroke-width:2px,color:#155724
+    classDef failure fill:#f8d7da,stroke:#721c24,stroke-width:2px,color:#721c24
+    classDef process fill:#e2e3e5,stroke:#383d41,stroke-width:2px,color:#383d41
+    classDef component fill:#cce5ff,stroke:#0056b3,stroke-width:3px,color:#0056b3
+    classDef blocked fill:#ffe6cc,stroke:#cc5500,stroke-width:2px,color:#cc5500
+    classDef criteria fill:#fff3cd,stroke:#856404,stroke-width:2px,color:#856404
+    
+    %% Apply styles
+    class END_SUCCESS success
+    class END_FAIL failure
+    class START,CONFIG,TEST_CONN,READ_WRITE,STABILITY,DOCUMENT process
+    class CONN_SUCCESS,RW_SUCCESS,STABLE_SUCCESS,PROD_READY process
+    class SF,PROXY,MYSQL component
+    class DIRECT blocked
+    class AC1,AC2,AC3,AC4,AC5,AC6,AC7,DOC1,DOC2,DOC3,DOC4,DOC5 criteria
+```
+
+## Key Points
+
+### Connection Requirements
+- **All traffic must flow through the staging proxy endpoint**
+- **Direct public database access is prohibited**
+- **Connection must be reliable and stable**
+
+### Validation Steps
+1. **Configure** Snowflake to connect via proxy endpoint
+2. **Test** basic connectivity through proxy
+3. **Validate** read/write operations work correctly
+4. **Confirm** connection stability over time
+5. **Document** all findings, quirks, and recommendations
+
+### Success Criteria
+- ✅ Reliable connection established
+- ✅ No direct public DB access used
+- ✅ Read/write operations functional
+- ✅ Connection remains stable
+- ✅ All findings documented for production readiness
+
+### Documentation Requirements
+- Connection configuration details
+- Performance metrics and benchmarks
+- Any connection quirks or limitations discovered
+- Tuning recommendations for optimization
+- Production readiness assessment and recommendations
