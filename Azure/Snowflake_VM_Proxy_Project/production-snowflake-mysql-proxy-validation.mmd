@@ -1,0 +1,78 @@
+%% Snowflake to MySQL Connectivity Validation via Proxy - PRODUCTION
+
+%% This diagram illustrates the validation process for ensuring connectivity from Snowflake to the Production MySQL database through a proxy, with all acceptance criteria and validation steps.
+
+flowchart LR
+    %% Components & Process Flow
+    SF["🏔️ Snowflake"] -.->|"✅ Via Proxy"| PROXY[("🛡️ Prod Proxy")]
+    SF -.->|"❌ Blocked"| DIRECT[("❌ Direct")]
+    PROXY --> MYSQL[("🗄️ MySQL")]
+    DIRECT -.->|"❌ No Access"| MYSQL
+    
+    %% Validation Flow
+    START(("🚀 Start")) --> CONFIG{"⚙️ Config"} --> TEST{"🔌 Test"} --> CONN_OK{"✅ OK?"}
+    CONN_OK -->|"Yes"| RW{"📖📝 R/W"} -->|"✅"| STABLE{"🔄 Stable"}
+    STABLE -->|"✅"| DOC{"📋 Doc"} --> SEC{"🔐 Security"} --> READY{"🎯 Ready?"}
+    READY -->|"✅"| MONITOR{"📊 Monitoring"} --> SUCCESS(("✅ Go Live"))
+    
+    %% Failure paths
+    CONN_OK -->|"No"| FAIL(("❌ Failed"))
+    RW -->|"❌"| FAIL
+    STABLE -->|"❌"| FAIL
+    SEC -->|"❌"| FAIL
+    READY -->|"⚠️"| FAIL
+    MONITOR -->|"❌"| FAIL
+           
+    %% Styling
+    classDef success fill:#d4edda,stroke:#155724,stroke-width:2px,color:#155724
+    classDef failure fill:#f8d7da,stroke:#721c24,stroke-width:2px,color:#721c24
+    classDef process fill:#e2e3e5,stroke:#383d41,stroke-width:2px,color:#383d41
+    classDef component fill:#cce5ff,stroke:#0056b3,stroke-width:3px,color:#0056b3
+    classDef blocked fill:#ffe6cc,stroke:#cc5500,stroke-width:2px,color:#cc5500
+    classDef security fill:#e1f5fe,stroke:#0277bd,stroke-width:3px,color:#0277bd
+    classDef monitoring fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#7b1fa2
+    
+    %% Apply styles
+    class SUCCESS success
+    class FAIL failure
+    class START,CONFIG,TEST,DOC process
+    class CONN_OK,RW,STABLE,READY process
+    class SEC security
+    class MONITOR monitoring
+    class SF,PROXY,MYSQL component
+    class DIRECT blocked
+
+%% ## Key Points - PRODUCTION ENVIRONMENT
+
+%% ### Connection Requirements
+%% - **All traffic must flow through the production proxy endpoint**
+%% - **Direct public database access is strictly prohibited**
+%% - **Connection must be reliable, stable, and secure**
+%% - **Enhanced monitoring and alerting required**
+
+%% ### Validation Steps
+%% 1. **Configure** Snowflake to connect via production proxy endpoint
+%% 2. **Test** basic connectivity through proxy with production credentials
+%% 3. **Validate** read/write operations work correctly with production data
+%% 4. **Confirm** connection stability over extended time periods
+%% 5. **Security Review** - audit logs, access controls, encryption
+%% 6. **Document** all findings, performance metrics, and operational procedures
+%% 7. **Setup Monitoring** - alerts, dashboards, performance tracking, health checks
+
+%% ### Success Criteria - PRODUCTION
+%% - ✅ Reliable connection established with SLA compliance
+%% - ✅ No direct public DB access used (strictly enforced)
+%% - ✅ Read/write operations functional with production workloads
+%% - ✅ Connection remains stable under production load
+%% - ✅ Security review passed with all controls verified
+%% - ✅ Comprehensive documentation for operations team
+%% - ✅ Monitoring and alerting configured and tested
+%% - ✅ Health checks and performance dashboards operational
+
+%% ### Documentation Requirements - PRODUCTION
+%% - Production connection configuration and credentials management
+%% - Performance metrics, SLA requirements, and capacity planning
+%% - Security controls, audit trails, and compliance requirements
+%% - Operational runbooks for troubleshooting and maintenance
+%% - Disaster recovery and failover procedures
+%% - Production readiness checklist and go-live approval
