@@ -1,8 +1,7 @@
-# Snowflake to MySQL Connectivity Validation via Proxy
+%% Snowflake to MySQL Connectivity Validation via Proxy
 
-This diagram illustrates the validation process for ensuring connectivity from Snowflake to the Staging MySQL database through a proxy, with all acceptance criteria and validation steps.
+%% This diagram illustrates the validation process for ensuring connectivity from Snowflake to the Staging MySQL database through a proxy, with all acceptance criteria and validation steps.
 
-```mermaid
 flowchart TD
     %% Main Components
     SF["🏔️ Snowflake"]
@@ -48,29 +47,7 @@ flowchart TD
     DOCUMENT --> PROD_READY
     PROD_READY -->|"Yes"| END_SUCCESS
     PROD_READY -->|"No - needs tuning"| END_FAIL
-    
-    %% Subgraph for Acceptance Criteria
-    subgraph CRITERIA ["🎯 Acceptance Criteria"]
-        direction TB
-        AC1["✅ Reliable connection to MySQL"]
-        AC2["✅ No direct public DB access"]
-        AC3["✅ Successful connection achieved"]
-        AC4["✅ Basic read/write validated"]
-        AC5["✅ Stable connection confirmed"]
-        AC6["📄 Findings documented"]
-        AC7["⚠️ Quirks/limits captured"]
-    end
-    
-    %% Subgraph for Documentation Requirements
-    subgraph DOCS ["📋 Documentation Requirements"]
-        direction TB
-        DOC1["Connection configuration"]
-        DOC2["Performance metrics"]
-        DOC3["Connection quirks/limits"]
-        DOC4["Tuning recommendations"]
-        DOC5["Production readiness assessment"]
-    end
-    
+           
     %% Styling
     classDef success fill:#d4edda,stroke:#155724,stroke-width:2px,color:#155724
     classDef failure fill:#f8d7da,stroke:#721c24,stroke-width:2px,color:#721c24
@@ -87,32 +64,31 @@ flowchart TD
     class SF,PROXY,MYSQL component
     class DIRECT blocked
     class AC1,AC2,AC3,AC4,AC5,AC6,AC7,DOC1,DOC2,DOC3,DOC4,DOC5 criteria
-```
 
-## Key Points
+%% ## Key Points
 
-### Connection Requirements
-- **All traffic must flow through the staging proxy endpoint**
-- **Direct public database access is prohibited**
-- **Connection must be reliable and stable**
+%% ### Connection Requirements
+%% - **All traffic must flow through the staging proxy endpoint**
+%% - **Direct public database access is prohibited**
+%% - **Connection must be reliable and stable**
 
-### Validation Steps
-1. **Configure** Snowflake to connect via proxy endpoint
-2. **Test** basic connectivity through proxy
-3. **Validate** read/write operations work correctly
-4. **Confirm** connection stability over time
-5. **Document** all findings, quirks, and recommendations
+%% ### Validation Steps
+%% 1. **Configure** Snowflake to connect via proxy endpoint
+%% 2. **Test** basic connectivity through proxy
+%% 3. **Validate** read/write operations work correctly
+%% 4. **Confirm** connection stability over time
+%% 5. **Document** all findings, quirks, and recommendations
 
-### Success Criteria
-- ✅ Reliable connection established
-- ✅ No direct public DB access used
-- ✅ Read/write operations functional
-- ✅ Connection remains stable
-- ✅ All findings documented for production readiness
+%% ### Success Criteria
+%% - ✅ Reliable connection established
+%% - ✅ No direct public DB access used
+%% - ✅ Read/write operations functional
+%% - ✅ Connection remains stable
+%% - ✅ All findings documented for production readiness
 
-### Documentation Requirements
-- Connection configuration details
-- Performance metrics and benchmarks
-- Any connection quirks or limitations discovered
-- Tuning recommendations for optimization
-- Production readiness assessment and recommendations
+%% ### Documentation Requirements
+%% - Connection configuration details
+%% - Performance metrics and benchmarks
+%% - Any connection quirks or limitations discovered
+%% - Tuning recommendations for optimization
+%% - Production readiness assessment and recommendations
