@@ -2,8 +2,8 @@
 # =============================================================================
 # assign-defender-owners.sh
 #
-# Assigns furqan@vantageanalytics.com as governance owner (60-day due date)
-# to all 22 HIGH risk Defender for Cloud recommendations using az CLI.
+# Assigns specified azure user as governance owner (60-day due date)
+# to all HIGH risk Defender for Cloud recommendations using az CLI.
 #
 # Prerequisites:
 #   brew install azure-cli   (if not already installed)
@@ -18,37 +18,16 @@ OWNER="furqan@vantageanalytics.com"
 DUE_DATE="2026-06-28T04:00:00Z"
 API_VERSION="2025-05-04"
 
-# All 22 HIGH risk assessment IDs from your CSV
+# Insert HIGH risk assessment IDs from your CSV here
 ASSESSMENT_IDS=(
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.compute/virtualmachines/metabase-01/providers/microsoft.security/assessments/1195afff-c881-495e-9bc5-1486211ae03f"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/2026-imageprep/providers/microsoft.compute/virtualmachines/campaign-central-runner/providers/microsoft.security/assessments/f2f595ec-5dc6-68b4-82ef-b63563e9c610"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/2026-imageprep/providers/microsoft.compute/virtualmachines/campaign-central-runner/providers/microsoft.security/assessments/1195afff-c881-495e-9bc5-1486211ae03f"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.compute/virtualmachines/prodscheduler-02/providers/microsoft.security/assessments/1195afff-c881-495e-9bc5-1486211ae03f"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.compute/virtualmachines/prod-va-queue-02/providers/microsoft.security/assessments/1195afff-c881-495e-9bc5-1486211ae03f"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/inbound/providers/microsoft.compute/virtualmachines/prod-in-queue-02/providers/microsoft.security/assessments/1195afff-c881-495e-9bc5-1486211ae03f"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/satellite/providers/microsoft.compute/virtualmachines/prod-sa-queue-02/providers/microsoft.security/assessments/1195afff-c881-495e-9bc5-1486211ae03f"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.documentdb/databaseaccounts/prod-ad-attribution-db/providers/microsoft.security/assessments/14acab4e-ad95-11ec-b909-0242ac120002"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.storage/storageaccounts/globaldiag372/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.storage/storageaccounts/prodadattributionreader/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.storage/storageaccounts/campaigncentralprd/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.storage/storageaccounts/dataexplorerprd/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.storage/storageaccounts/ctcproductsprd/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.storage/storageaccounts/prodproductsservice/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.storage/storageaccounts/proddbbackupstore/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.storage/storageaccounts/prodqueuepollerv2/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/satellite/providers/microsoft.storage/storageaccounts/prodsnowflakedump/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.storage/storageaccounts/hdusbidsprd/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/satellite/providers/microsoft.storage/storageaccounts/satellitediag/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.storage/storageaccounts/vantageprodcdnstorage/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.storage/storageaccounts/prodadattributionwriter/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/inbound/providers/microsoft.storage/storageaccounts/inbounddiag/providers/microsoft.security/assessments/3b363842-30f5-4056-980d-3a40fa5de8b3"
+
 )
 
 # --------------------------------------------------------------------------- #
 
 echo ""
 echo "============================================================"
-echo "  Defender for Cloud - Governance Assignment"
+echo "  Defender for Cloud - Governance Assignment (HIGH)"
 echo "============================================================"
 echo "  Owner   : $OWNER"
 echo "  Due Date: $DUE_DATE"
