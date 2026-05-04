@@ -68,7 +68,7 @@ for ASSESSMENT_ID in "${ASSESSMENT_IDS[@]}"; do
 EOF
 )
 
-  printf "  [%3d/116] ► [%-35s] " "$COUNTER" "$RESOURCE_NAME"
+  printf "  [%3d/${#ASSESSMENT_IDS[@]}] ► [%-35s] " "$COUNTER" "$RESOURCE_NAME"
 
   RESPONSE=$(az rest --method PUT --url "$URL" --body "$BODY" --headers "Content-Type=application/json" 2>&1)
 
