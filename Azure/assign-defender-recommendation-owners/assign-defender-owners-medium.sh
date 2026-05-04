@@ -46,8 +46,10 @@ echo ""
 
 SUCCESS=0
 FAIL=0
+COUNTER=0
 
 for ASSESSMENT_ID in "${ASSESSMENT_IDS[@]}"; do
+  ((COUNTER++))
   RESOURCE_NAME=$(echo "$ASSESSMENT_ID" | awk -F'/' '{print $9}')
   ASSIGNMENT_NAME=$(uuidgen | tr '[:upper:]' '[:lower:]')
   URL="https://management.azure.com${ASSESSMENT_ID}/governanceAssignments/${ASSIGNMENT_NAME}?api-version=${API_VERSION}"
@@ -67,7 +69,7 @@ for ASSESSMENT_ID in "${ASSESSMENT_IDS[@]}"; do
 EOF
 )
 
-  printf "  ► [%-35s] " "$RESOURCE_NAME"
+  printf "  [%3d/${#ASSESSMENT_IDS[@]}] ► [%-35s] " "$COUNTER" "$RESOURCE_NAME"
 
   RESPONSE=$(az rest --method PUT --url "$URL" --body "$BODY" --headers "Content-Type=application/json" 2>&1)
 
