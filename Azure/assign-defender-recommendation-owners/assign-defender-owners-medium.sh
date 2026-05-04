@@ -2,8 +2,8 @@
 # =============================================================================
 # assign-defender-owners-medium.sh
 #
-# Assigns furqan@vantageanalytics.com as governance owner (90-day due date)
-# to all 11 MEDIUM risk Defender for Cloud recommendations using az CLI.
+# Assigns specified azure user as governance owner (90-day due date)
+# to all MEDIUM risk Defender for Cloud recommendations using az CLI.
 #
 # Prerequisites:
 #   az login
@@ -17,19 +17,9 @@ OWNER="furqan@vantageanalytics.com"
 DUE_DATE="2026-07-28T04:00:00Z"
 API_VERSION="2025-05-04"
 
-# All 11 MEDIUM risk assessment IDs from your CSV
+# Insert MEDIUM risk assessment IDs from your CSV here
 ASSESSMENT_IDS=(
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/2026-imageprep/providers/microsoft.compute/virtualmachines/campaign-central-runner/providers/microsoft.security/assessments/9dbdb071-d643-0d14-1dab-ed87d890e5a1"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/2026-imageprep/providers/microsoft.compute/virtualmachines/campaign-central-runner/providers/microsoft.security/assessments/bcb554cc-d873-c3d1-2780-ccd7c0b5d5b1"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.compute/virtualmachines/metabase-01/providers/microsoft.security/assessments/322b46b6-6f56-5c3f-0559-4698056f075e"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/global/providers/microsoft.compute/virtualmachines/metabase-01/providers/microsoft.security/assessments/17618b1a-ed14-49bb-b37f-9f8ba967be8b"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/2026-imageprep/providers/microsoft.compute/virtualmachines/campaign-central-runner/providers/microsoft.security/assessments/17618b1a-ed14-49bb-b37f-9f8ba967be8b"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/satellite/providers/microsoft.compute/virtualmachines/prod-sa-queue-02/providers/microsoft.security/assessments/322b46b6-6f56-5c3f-0559-4698056f075e"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.compute/virtualmachines/prod-va-queue-02/providers/microsoft.security/assessments/322b46b6-6f56-5c3f-0559-4698056f075e"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/inbound/providers/microsoft.compute/virtualmachines/prod-in-queue-02/providers/microsoft.security/assessments/322b46b6-6f56-5c3f-0559-4698056f075e"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/inbound/providers/microsoft.compute/virtualmachines/prod-in-queue-02/providers/microsoft.security/assessments/17618b1a-ed14-49bb-b37f-9f8ba967be8b"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/satellite/providers/microsoft.compute/virtualmachines/prod-sa-queue-02/providers/microsoft.security/assessments/17618b1a-ed14-49bb-b37f-9f8ba967be8b"
-  "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourcegroups/vantage/providers/microsoft.compute/virtualmachines/prod-va-queue-02/providers/microsoft.security/assessments/17618b1a-ed14-49bb-b37f-9f8ba967be8b"
+
 )
 
 # --------------------------------------------------------------------------- #
