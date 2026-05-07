@@ -198,10 +198,11 @@ def ingest_cost_export(event: func.EventGridEvent) -> None:
     Pipeline:
       1. Extract blob path + environment from the event
       2. Idempotency check — skip if already processed
-      3. Download and decompress the .csv.gz file
-      4. Parse CSV rows, map columns, inject Environment
-      5. POST records in batches to the DCE → DCR → AzureCostData_CL
-      6. Write processing marker
+      3. Download the .csv.gz file
+      4. Stream-decompress → parse CSV → transform rows → ingest in batches
+         (rows are never fully materialised in memory; only BATCH_SIZE dicts
+          exist at any one time, keeping memory flat regardless of file size)
+      5. Write processing marker
     """
     event_data = event.get_json()
     blob_url = event_data.get("url", "")
@@ -245,57 +246,86 @@ def ingest_cost_export(event: func.EventGridEvent) -> None:
         logging.error(f"Failed to download blob {blob_path}: {e}")
         raise
 
-    # --- Decompress ---
-    try:
-        decompressed = gzip.decompress(compressed_data)
-        logging.info(f"Decompressed to {len(decompressed):,} bytes")
-    except Exception as e:
-        logging.error(f"Failed to decompress {blob_path}: {e}")
-        raise
-
-    # --- Parse + transform ---
-    try:
-        # utf-8-sig strips the BOM that Excel/Azure sometimes writes
-        text = decompressed.decode("utf-8-sig")
-        reader = csv.DictReader(io.StringIO(text))
-        records = [transform_row(row, environment) for row in reader]
-    except Exception as e:
-        logging.error(f"Failed to parse CSV from {blob_path}: {e}")
-        raise
-
-    logging.info(f"Parsed {len(records):,} records from {blob_path}")
-
-    if not records:
-        logging.warning(f"No records in {blob_path} — marking processed and exiting")
-        mark_as_processed(blob_service_client, blob_path)
-        return
-
-    # --- Ingest via Logs Ingestion API ---
+    # --- Stream decompress → parse → ingest ---
+    #
+    # Previously the code decompressed the entire file into a byte string,
+    # decoded it into a text string, then built a list of every transformed
+    # row before batching — holding up to 3 full copies of the data in memory
+    # at once. For large backfill files this breached the Consumption plan
+    # memory limit and caused the worker to be OOM-killed (exit code 137).
+    #
+    # Now we open the compressed bytes as a streaming gzip reader and feed
+    # rows directly into the CSV reader. Each batch of BATCH_SIZE records is
+    # ingested and then released before the next batch is built, keeping the
+    # working set flat regardless of file size.
+    #
     ingestion_client = LogsIngestionClient(
         endpoint=DCE_ENDPOINT,
         credential=credential,
     )
 
     total_ingested = 0
-    for i in range(0, len(records), BATCH_SIZE):
-        batch = records[i : i + BATCH_SIZE]
-        try:
-            ingestion_client.upload(
-                rule_id=DCR_IMMUTABLE_ID,
-                stream_name=STREAM_NAME,
-                logs=batch,
-            )
-            total_ingested += len(batch)
-            logging.info(
-                f"Batch {i // BATCH_SIZE + 1} ingested: "
-                f"{len(batch)} records (total so far: {total_ingested})"
-            )
-        except HttpResponseError as e:
-            logging.error(
-                f"Ingestion API error on batch starting at row {i}: "
-                f"status={e.status_code} message={e.message}"
-            )
-            raise
+    batch: list[dict] = []
+    batch_num = 0
+
+    try:
+        # utf-8-sig mode strips the BOM that Excel/Azure sometimes writes
+        with gzip.open(io.BytesIO(compressed_data), mode="rt", encoding="utf-8-sig") as gz_file:
+            reader = csv.DictReader(gz_file)
+
+            for row in reader:
+                batch.append(transform_row(row, environment))
+
+                if len(batch) >= BATCH_SIZE:
+                    batch_num += 1
+                    try:
+                        ingestion_client.upload(
+                            rule_id=DCR_IMMUTABLE_ID,
+                            stream_name=STREAM_NAME,
+                            logs=batch,
+                        )
+                        total_ingested += len(batch)
+                        logging.info(
+                            f"Batch {batch_num} ingested: "
+                            f"{len(batch)} records (total so far: {total_ingested})"
+                        )
+                    except HttpResponseError as e:
+                        logging.error(
+                            f"Ingestion API error on batch {batch_num} "
+                            f"(rows ~{total_ingested}–{total_ingested + len(batch)}): "
+                            f"status={e.status_code} message={e.message}"
+                        )
+                        raise
+                    finally:
+                        batch = []  # release memory regardless of success/failure
+
+        # Flush any remaining rows that didn't fill a full batch
+        if batch:
+            batch_num += 1
+            try:
+                ingestion_client.upload(
+                    rule_id=DCR_IMMUTABLE_ID,
+                    stream_name=STREAM_NAME,
+                    logs=batch,
+                )
+                total_ingested += len(batch)
+                logging.info(
+                    f"Batch {batch_num} ingested: "
+                    f"{len(batch)} records (total so far: {total_ingested})"
+                )
+            except HttpResponseError as e:
+                logging.error(
+                    f"Ingestion API error on final batch {batch_num}: "
+                    f"status={e.status_code} message={e.message}"
+                )
+                raise
+
+    except Exception as e:
+        logging.error(f"Failed during streaming parse/ingest of {blob_path}: {e}")
+        raise
+
+    if total_ingested == 0:
+        logging.warning(f"No records in {blob_path} — marking processed and exiting")
 
     logging.info(f"Ingestion complete: {total_ingested:,} records from {blob_path}")
     mark_as_processed(blob_service_client, blob_path)
