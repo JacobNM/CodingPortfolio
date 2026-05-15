@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# Azure Resource Inventory\n---\nLiving inventory of Azure compute, data, and networking resources. Use the filters to scope by subscription or resource group."
+        "json": "# 📦 Vantage Analytics — Azure Resource Inventory\n---\nLiving inventory of Azure compute, data, and networking resources. Use the filters to scope by subscription or resource group."
       },
       "name": "workbook-title"
     },
@@ -28,10 +28,7 @@
               ],
               "includeAll": true
             },
-            "defaultValue": "value::all",
-            "value": [
-              "value::all"
-            ]
+            "defaultValue": "value::all"
           },
           {
             "id": "a1b2c3d4-0001-0001-0001-000000000002",
@@ -62,6 +59,273 @@
         "resourceType": "microsoft.monitor/accounts"
       },
       "name": "global-parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 📊 Resource Summary"
+      },
+      "name": "section-summary"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where type in (\n    'microsoft.compute/virtualmachines',\n    'microsoft.compute/virtualmachinescalesets',\n    'microsoft.dbformysql/flexibleservers',\n    'microsoft.dbforpostgresql/flexibleservers',\n    'microsoft.dbformysql/servers',\n    'microsoft.dbforpostgresql/servers',\n    'microsoft.documentdb/databaseaccounts',\n    'microsoft.cache/redis',\n    'microsoft.storage/storageaccounts',\n    'microsoft.web/sites',\n    'microsoft.web/serverfarms',\n    'microsoft.network/virtualnetworks',\n    'microsoft.network/networksecuritygroups',\n    'microsoft.network/publicipaddresses',\n    'microsoft.network/applicationgateways',\n    'microsoft.network/virtualnetworkgateways',\n    'microsoft.keyvault/vaults',\n    'microsoft.managedidentity/userassignedidentities',\n    'microsoft.operationalinsights/workspaces'\n)\n| extend SortOrder = case(\n    type == 'microsoft.compute/virtualmachines',                     1,\n    type == 'microsoft.compute/virtualmachinescalesets',             2,\n    type in ('microsoft.dbformysql/flexibleservers',\n             'microsoft.dbforpostgresql/flexibleservers',\n             'microsoft.dbformysql/servers',\n             'microsoft.dbforpostgresql/servers'),                   3,\n    type == 'microsoft.documentdb/databaseaccounts',                 4,\n    type == 'microsoft.cache/redis',                                 5,\n    type == 'microsoft.storage/storageaccounts',                     6,\n    type == 'microsoft.web/sites',                                   7,\n    type == 'microsoft.web/serverfarms',                             8,\n    type == 'microsoft.network/virtualnetworks',                     9,\n    type == 'microsoft.network/networksecuritygroups',               10,\n    type == 'microsoft.network/publicipaddresses',                   11,\n    type in ('microsoft.network/applicationgateways',\n             'microsoft.network/virtualnetworkgateways'),            12,\n    type == 'microsoft.keyvault/vaults',                             13,\n    type == 'microsoft.managedidentity/userassignedidentities',      14,\n    type == 'microsoft.operationalinsights/workspaces',              15,\n    99\n)\n| extend Category = case(\n    type == 'microsoft.compute/virtualmachines',                     '🖥️ Virtual Machines',\n    type == 'microsoft.compute/virtualmachinescalesets',             '📈 VM Scale Sets',\n    type in ('microsoft.dbformysql/flexibleservers',\n             'microsoft.dbforpostgresql/flexibleservers',\n             'microsoft.dbformysql/servers',\n             'microsoft.dbforpostgresql/servers'),                   '🗄️ Databases',\n    type == 'microsoft.documentdb/databaseaccounts',                 '🌌 Cosmos DB',\n    type == 'microsoft.cache/redis',                                 '🔴 Redis Cache',\n    type == 'microsoft.storage/storageaccounts',                     '💾 Storage Accounts',\n    type == 'microsoft.web/sites',                                   '⚡ Function / Web Apps',\n    type == 'microsoft.web/serverfarms',                             '⚡ App Service Plans',\n    type == 'microsoft.network/virtualnetworks',                     '🌐 Virtual Networks',\n    type == 'microsoft.network/networksecuritygroups',               '🌐 NSGs',\n    type == 'microsoft.network/publicipaddresses',                   '🌐 Public IPs',\n    type in ('microsoft.network/applicationgateways',\n             'microsoft.network/virtualnetworkgateways'),            '🌐 Gateways',\n    type == 'microsoft.keyvault/vaults',                             '🔐 Key Vaults',\n    type == 'microsoft.managedidentity/userassignedidentities',      '🔐 Managed Identities',\n    type == 'microsoft.operationalinsights/workspaces',              '🔧 Log Analytics',\n    type\n)\n| summarize Count = count() by Category, SortOrder\n| order by SortOrder asc",
+        "size": 3,
+        "title": "Resource Counts by Type",
+        "noDataMessage": "No resources found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": {
+            "columnMatch": "Category",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "Count",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            },
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "maximumSignificantDigits": 3,
+                "maximumFractionDigits": 0
+              }
+            }
+          }
+        }
+      },
+      "name": "query-summary-tiles"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## ⚠️ EOL & Deprecation Warnings\n---\n> Resources flagged below are running on end-of-life software, retired service tiers, or deprecated configurations. Each finding should be reviewed for upgrade or migration."
+      },
+      "name": "section-eol"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend GuestOSName    = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion = tostring(properties.extended.instanceView.osVersion)\n| extend OSDetail       = strcat(GuestOSName, ' ', GuestOSVersion)\n| extend EOLDate = case(\n    OSDetail contains 'CentOS' and OSDetail contains '6.',  'Jun 30, 2020',\n    OSDetail contains 'CentOS' and OSDetail contains '7.',  'Jun 30, 2024',\n    OSDetail contains 'CentOS' and OSDetail contains '8.',  'Dec 31, 2021',\n    OSDetail contains 'Ubuntu' and OSDetail contains '16.04', 'Apr 30, 2021',\n    OSDetail contains 'Ubuntu' and OSDetail contains '18.04', 'Apr 30, 2023',\n    OSDetail contains 'Ubuntu' and OSDetail contains '20.04', 'Apr 2, 2025',\n    OSDetail contains '2008',  'Jan 14, 2020',\n    OSDetail contains '2012',  'Oct 10, 2023',\n    OSDetail contains '2016',  'Jan 12, 2027',\n    ''\n)\n| extend Severity = case(\n    OSDetail contains '2016',                               'Warning — EOL Jan 2027',\n    OSDetail contains 'Ubuntu' and OSDetail contains '20.04', 'Warning — EOL Apr 2025',\n    isnotempty(EOLDate),                                    'Critical — Past EOL',\n    ''\n)\n| where isnotempty(EOLDate)\n| project\n    VMName        = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    OSDetail,\n    EOLDate,\n    Severity,\n    VMSize        = tostring(properties.hardwareProfile.vmSize),\n    ResourceId    = id\n| order by Severity asc, VMName asc",
+        "size": 3,
+        "title": "🖥️ VMs Running EOL Operating Systems",
+        "noDataMessage": "✅ No VMs with known EOL operating systems detected.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Warning",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-eol-os"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend GuestOSName    = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion = tostring(properties.extended.instanceView.osVersion)\n| extend PowerState     = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where isempty(GuestOSName) and PowerState contains 'running'\n| project\n    VMName        = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    PowerState,\n    VMSize        = tostring(properties.hardwareProfile.vmSize),\n    Note          = 'VM is running but guest agent is not reporting — OS cannot be inventoried or patched remotely',\n    ResourceId    = id\n| order by ResourceGroup asc, VMName asc",
+        "size": 3,
+        "title": "🖥️ Running VMs with Guest Agent Not Reporting",
+        "noDataMessage": "✅ All running VMs have an active guest agent.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Note",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-agent-not-reporting"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in ('microsoft.dbformysql/servers', 'microsoft.dbforpostgresql/servers')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Engine = case(\n    type == 'microsoft.dbformysql/servers',        'MySQL Single Server',\n    type == 'microsoft.dbforpostgresql/servers',   'PostgreSQL Single Server',\n    type\n)\n| extend RetiredDate = case(\n    type == 'microsoft.dbformysql/servers',        'Sep 16, 2024',\n    type == 'microsoft.dbforpostgresql/servers',   'Mar 28, 2025',\n    ''\n)\n| extend MigrationTarget = case(\n    type == 'microsoft.dbformysql/servers',        'MySQL Flexible Server',\n    type == 'microsoft.dbforpostgresql/servers',   'PostgreSQL Flexible Server',\n    ''\n)\n| extend Version = tostring(properties.version)\n| extend State   = tostring(properties.userVisibleState)\n| project\n    ServerName      = name,\n    ResourceGroup   = resourceGroup,\n    Location        = location,\n    Engine,\n    Version,\n    State,\n    RetiredDate,\n    MigrationTarget,\n    ResourceId      = id\n| order by Engine asc, ServerName asc",
+        "size": 3,
+        "title": "🗄️ Retired Database Tiers (Single Server)",
+        "noDataMessage": "✅ No retired Single Server database instances found.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "RetiredDate",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "MigrationTarget",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "success",
+                    "text": "➜ {0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-eol-db-tiers"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in ('microsoft.storage/storageaccounts', 'microsoft.cache/redis')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend MinTLS      = tostring(properties.minimumTlsVersion)\n| extend ResourceType = case(\n    type == 'microsoft.storage/storageaccounts', 'Storage Account',\n    type == 'microsoft.cache/redis',             'Redis Cache',\n    type\n)\n| extend TLSDisplay = iff(isempty(MinTLS), 'Not set (defaults to TLS 1.0)', MinTLS)\n| extend Severity = case(\n    MinTLS == 'TLS1_0' or isempty(MinTLS), 'Critical — TLS 1.0 allowed',\n    MinTLS == 'TLS1_1',                    'Warning — TLS 1.1 allowed',\n    ''\n)\n| where MinTLS in ('TLS1_0', 'TLS1_1') or isempty(MinTLS)\n| project\n    ResourceName  = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    ResourceType,\n    TLSDisplay,\n    Severity,\n    ResourceId    = id\n| order by Severity asc, ResourceType asc, ResourceName asc",
+        "size": 3,
+        "title": "🔐 Resources Permitting TLS Below 1.2",
+        "noDataMessage": "✅ All storage accounts and Redis instances enforce TLS 1.2 or higher.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Warning",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-eol-tls"
     },
     {
       "type": 1,
@@ -236,7 +500,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in (\n    'microsoft.dbformysql/flexibleservers',\n    'microsoft.dbforpostgresql/flexibleservers',\n    'microsoft.dbforpostgresql/servers',\n    'microsoft.dbformysql/servers'\n)\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Engine = case(\n    type == 'microsoft.dbformysql/flexibleservers',      'MySQL Flexible',\n    type == 'microsoft.dbforpostgresql/flexibleservers', 'PostgreSQL Flexible',\n    type == 'microsoft.dbforpostgresql/servers',         'PostgreSQL Single',\n    type == 'microsoft.dbformysql/servers',              'MySQL Single',\n    type\n)\n| extend Version   = tostring(properties.version)\n| extend SKU       = tostring(sku.name)\n| extend Tier      = tostring(sku.tier)\n| extend StorageGB = tostring(properties.storage.storageSizeGB)\n| extend State     = tostring(properties.state)\n| project\n    ServerName    = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    Engine,\n    Version,\n    Tier,\n    SKU,\n    StorageGB,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, ServerName asc",
+        "query": "Resources\n| where type in (\n    'microsoft.dbformysql/flexibleservers',\n    'microsoft.dbforpostgresql/flexibleservers',\n    'microsoft.dbforpostgresql/servers',\n    'microsoft.dbformysql/servers'\n)\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Engine = case(\n    type == 'microsoft.dbformysql/flexibleservers',      'MySQL Flexible',\n    type == 'microsoft.dbforpostgresql/flexibleservers', 'PostgreSQL Flexible',\n    type == 'microsoft.dbforpostgresql/servers',         'PostgreSQL Single ⚠️',\n    type == 'microsoft.dbformysql/servers',              'MySQL Single ⚠️',\n    type\n)\n| extend Version   = tostring(properties.version)\n| extend SKU       = tostring(sku.name)\n| extend Tier      = tostring(sku.tier)\n| extend StorageGB = tostring(properties.storage.storageSizeGB)\n| extend State     = tostring(properties.state)\n| project\n    ServerName    = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    Engine,\n    Version,\n    Tier,\n    SKU,\n    StorageGB,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, ServerName asc",
         "size": 0,
         "title": "MySQL & PostgreSQL Servers",
         "noDataMessage": "No MySQL or PostgreSQL servers found for the selected scope.",
@@ -323,7 +587,7 @@
       "content": {
         "version": "KqlItem/1.0",
         "query": "Resources\n| where type == 'microsoft.cache/redis'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKUName       = tostring(sku.name)\n| extend SKUFamily     = tostring(sku.family)\n| extend Capacity      = tostring(sku.capacity)\n| extend RedisVersion  = tostring(properties.redisVersion)\n| extend SSLOnly       = iff(tostring(properties.enableNonSslPort) == 'true', 'No', 'Yes')\n| extend MinTLSVersion = tostring(properties.minimumTlsVersion)\n| extend State         = tostring(properties.provisioningState)\n| project\n    CacheName     = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKUName,\n    SKUFamily,\n    Capacity,\n    RedisVersion,\n    SSLOnly,\n    MinTLSVersion,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, CacheName asc",
-        "size": 0,
+        "size": 3,
         "title": "Redis Cache Instances",
         "noDataMessage": "No Redis Cache instances found for the selected scope.",
         "queryType": 1,
@@ -735,7 +999,7 @@
       "content": {
         "version": "KqlItem/1.0",
         "query": "Resources\n| where type in (\n    'microsoft.network/applicationgateways',\n    'microsoft.network/virtualnetworkgateways'\n)\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend GatewayType = case(\n    type == 'microsoft.network/applicationgateways',    'Application Gateway',\n    type == 'microsoft.network/virtualnetworkgateways', 'VNet Gateway',\n    type\n)\n| extend SKUName  = tostring(sku.name)\n| extend SKUTier  = tostring(sku.tier)\n| extend Capacity = tostring(sku.capacity)\n| extend State    = tostring(properties.provisioningState)\n| project\n    GatewayName   = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    GatewayType,\n    SKUName,\n    SKUTier,\n    Capacity,\n    State,\n    ResourceId    = id\n| order by GatewayType asc, ResourceGroup asc, GatewayName asc",
-        "size": 0,
+        "size": 3,
         "title": "Application Gateways & VNet Gateways",
         "noDataMessage": "No gateways found for the selected scope.",
         "queryType": 1,
