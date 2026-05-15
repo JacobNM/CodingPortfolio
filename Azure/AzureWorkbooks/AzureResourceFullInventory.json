@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# 📦 Vantage Analytics — Azure Resource Inventory\n---\nLiving inventory of Azure compute, data, and networking resources. Use the filters to scope by subscription, resource group, or tag."
+        "json": "# 📦 Azure Resource Inventory\n---\nLiving inventory of Azure compute, data, and networking resources. Use the filters to scope by subscription, resource group, or tag."
       },
       "name": "workbook-title"
     },
