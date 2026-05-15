@@ -1,0 +1,974 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Azure Resource Inventory\n---\nLiving inventory of Azure compute, data, and networking resources. Use the filters to scope by subscription or resource group."
+      },
+      "name": "workbook-title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000001",
+            "version": "KqlParameterItem/1.0",
+            "name": "Subscriptions",
+            "label": "Subscription",
+            "type": 6,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "includeAll": true
+            },
+            "defaultValue": "value::all",
+            "value": [
+              "value::all"
+            ]
+          },
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000002",
+            "version": "KqlParameterItem/1.0",
+            "name": "ResourceGroups",
+            "label": "Resource Group",
+            "type": 2,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "ResourceContainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| project value = name, label = name\n| order by label asc",
+            "crossComponentResources": [
+              "{Subscriptions}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "selectAllValue": "*"
+            },
+            "defaultValue": "value::all",
+            "queryType": 1,
+            "resourceType": "microsoft.resourcegraph/resources"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.monitor/accounts"
+      },
+      "name": "global-parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 🖥️ Virtual Machines"
+      },
+      "name": "section-vms"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend OSType           = tostring(properties.storageProfile.osDisk.osType)\n| extend MarketplaceOffer = tostring(properties.storageProfile.imageReference.offer)\n| extend MarketplaceSku   = tostring(properties.storageProfile.imageReference.sku)\n| extend CustomImageId    = tostring(properties.storageProfile.imageReference.id)\n| extend CustomImageName  = tostring(split(CustomImageId, '/')[-1])\n| extend GuestOSName      = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion   = tostring(properties.extended.instanceView.osVersion)\n| extend PowerState       = tostring(properties.extended.instanceView.powerState.displayStatus)\n| extend ImageSource = case(\n    isnotempty(MarketplaceOffer), strcat(MarketplaceOffer, ' | ', MarketplaceSku),\n    isnotempty(CustomImageName),  strcat('Custom: ', CustomImageName),\n    'Unknown'\n)\n| extend OSDetail = case(\n    isnotempty(GuestOSName), strcat(GuestOSName, ' ', GuestOSVersion),\n    'Agent not reporting'\n)\n| project\n    VMName        = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    PowerState,\n    OSType,\n    OSDetail,\n    ImageSource,\n    VMSize        = tostring(properties.hardwareProfile.vmSize),\n    ResourceId    = id\n| order by ResourceGroup asc, VMName asc",
+        "size": 0,
+        "title": "Virtual Machine Inventory",
+        "noDataMessage": "No VMs found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "PowerState",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "running",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "deallocated",
+                    "representation": "stopped",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "OSDetail",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Agent not reporting",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true,
+          "sortBy": [
+            {
+              "itemKey": "ResourceGroup",
+              "sortOrder": 1
+            }
+          ]
+        },
+        "sortBy": [
+          {
+            "itemKey": "ResourceGroup",
+            "sortOrder": 1
+          }
+        ]
+      },
+      "name": "query-vms"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 📈 Virtual Machine Scale Sets"
+      },
+      "name": "section-vmss"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachinescalesets'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKUName       = tostring(sku.name)\n| extend Capacity      = toint(sku.capacity)\n| extend UpgradePolicy = tostring(properties.upgradePolicy.mode)\n| extend OverProvision = tostring(properties.overprovision)\n| extend State         = tostring(properties.provisioningState)\n| project\n    VMSSName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKUName,\n    Capacity,\n    UpgradePolicy,\n    OverProvision,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, VMSSName asc",
+        "size": 0,
+        "title": "VM Scale Set Inventory",
+        "noDataMessage": "No VMSS found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "State",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Succeeded",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Capacity",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "max": 20,
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-vmss"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 🗄️ Databases"
+      },
+      "name": "section-dbs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in (\n    'microsoft.dbformysql/flexibleservers',\n    'microsoft.dbforpostgresql/flexibleservers',\n    'microsoft.dbforpostgresql/servers',\n    'microsoft.dbformysql/servers'\n)\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Engine = case(\n    type == 'microsoft.dbformysql/flexibleservers',      'MySQL Flexible',\n    type == 'microsoft.dbforpostgresql/flexibleservers', 'PostgreSQL Flexible',\n    type == 'microsoft.dbforpostgresql/servers',         'PostgreSQL Single',\n    type == 'microsoft.dbformysql/servers',              'MySQL Single',\n    type\n)\n| extend Version   = tostring(properties.version)\n| extend SKU       = tostring(sku.name)\n| extend Tier      = tostring(sku.tier)\n| extend StorageGB = tostring(properties.storage.storageSizeGB)\n| extend State     = tostring(properties.state)\n| project\n    ServerName    = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    Engine,\n    Version,\n    Tier,\n    SKU,\n    StorageGB,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, ServerName asc",
+        "size": 0,
+        "title": "MySQL & PostgreSQL Servers",
+        "noDataMessage": "No MySQL or PostgreSQL servers found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "State",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Ready",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-dbs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.documentdb/databaseaccounts'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Kind             = tostring(kind)\n| extend ConsistencyLevel = tostring(properties.consistencyPolicy.defaultConsistencyLevel)\n| extend PrimaryLocation  = tostring(properties.locations[0].locationName)\n| extend FreeTier         = tostring(properties.enableFreeTier)\n| extend State            = tostring(properties.provisioningState)\n| project\n    AccountName      = name,\n    ResourceGroup    = resourceGroup,\n    Location         = location,\n    Kind,\n    ConsistencyLevel,\n    PrimaryLocation,\n    FreeTier,\n    State,\n    ResourceId       = id\n| order by ResourceGroup asc, AccountName asc",
+        "size": 0,
+        "title": "Cosmos DB Accounts",
+        "noDataMessage": "No Cosmos DB accounts found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-cosmos"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 🔴 Redis Cache"
+      },
+      "name": "section-redis"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.cache/redis'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKUName       = tostring(sku.name)\n| extend SKUFamily     = tostring(sku.family)\n| extend Capacity      = tostring(sku.capacity)\n| extend RedisVersion  = tostring(properties.redisVersion)\n| extend SSLOnly       = iff(tostring(properties.enableNonSslPort) == 'true', 'No', 'Yes')\n| extend MinTLSVersion = tostring(properties.minimumTlsVersion)\n| extend State         = tostring(properties.provisioningState)\n| project\n    CacheName     = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKUName,\n    SKUFamily,\n    Capacity,\n    RedisVersion,\n    SSLOnly,\n    MinTLSVersion,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, CacheName asc",
+        "size": 0,
+        "title": "Redis Cache Instances",
+        "noDataMessage": "No Redis Cache instances found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "SSLOnly",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Yes",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "State",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Succeeded",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-redis"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 💾 Storage"
+      },
+      "name": "section-storage"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.storage/storageaccounts'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Kind             = tostring(kind)\n| extend SKU              = tostring(sku.name)\n| extend AccessTier       = tostring(properties.accessTier)\n| extend PublicBlobAccess = tostring(properties.allowBlobPublicAccess)\n| extend HTTPSOnly        = tostring(properties.supportsHttpsTrafficOnly)\n| extend MinTLSVersion    = tostring(properties.minimumTlsVersion)\n| extend State            = tostring(properties.provisioningState)\n| project\n    AccountName       = name,\n    ResourceGroup     = resourceGroup,\n    Location          = location,\n    Kind,\n    SKU,\n    AccessTier,\n    PublicBlobAccess,\n    HTTPSOnly,\n    MinTLSVersion,\n    State,\n    ResourceId        = id\n| order by ResourceGroup asc, AccountName asc",
+        "size": 0,
+        "title": "Storage Accounts",
+        "noDataMessage": "No Storage Accounts found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "PublicBlobAccess",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "true",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "false",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "HTTPSOnly",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "true",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-storage"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.compute/disks'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where properties.diskState == 'Unattached'\n| extend DiskSizeGB  = toint(properties.diskSizeGB)\n| extend SKU         = tostring(sku.name)\n| extend OSType      = tostring(properties.osType)\n| extend CreatedTime = tostring(properties.timeCreated)\n| project\n    DiskName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKU,\n    DiskSizeGB,\n    OSType,\n    CreatedTime,\n    ResourceId    = id\n| order by DiskSizeGB desc, ResourceGroup asc",
+        "size": 0,
+        "title": "⚠️ Unattached Managed Disks (potential cost leak)",
+        "noDataMessage": "✅ No unattached disks found — nothing to clean up.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "DiskSizeGB",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "max": 2048,
+                "palette": "redGreen"
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-unattached-disks"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## ⚡ Function Apps & App Services"
+      },
+      "name": "section-functions"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.web/sites'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend AppKind      = case(\n    kind contains 'functionapp', 'Function App',\n    kind contains 'app',         'Web App / API',\n    kind\n)\n| extend OSKind       = iff(kind contains 'linux', 'Linux', 'Windows')\n| extend RuntimeStack = tostring(properties.siteConfig.linuxFxVersion)\n| extend HostName     = tostring(properties.defaultHostName)\n| extend State        = tostring(properties.state)\n| project\n    AppName       = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    AppKind,\n    OSKind,\n    RuntimeStack,\n    HostName,\n    State,\n    ResourceId    = id\n| order by AppKind asc, ResourceGroup asc, AppName asc",
+        "size": 0,
+        "title": "Function Apps & Web Apps",
+        "noDataMessage": "No Function Apps or Web Apps found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "State",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Running",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-functions"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.web/serverfarms'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKUName  = tostring(sku.name)\n| extend SKUTier  = tostring(sku.tier)\n| extend OSKind   = iff(kind contains 'linux', 'Linux', 'Windows')\n| extend AppCount = toint(properties.numberOfSites)\n| extend Workers  = toint(properties.numberOfWorkers)\n| extend State    = tostring(properties.status)\n| project\n    PlanName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKUName,\n    SKUTier,\n    OSKind,\n    AppCount,\n    Workers,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, PlanName asc",
+        "size": 0,
+        "title": "App Service Plans",
+        "noDataMessage": "No App Service Plans found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "AppCount",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "max": 20,
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-app-plans"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 🌐 Networking"
+      },
+      "name": "section-networking"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.network/virtualnetworks'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend AddressSpace = tostring(properties.addressSpace.addressPrefixes)\n| extend SubnetCount  = array_length(properties.subnets)\n| extend PeeringCount = array_length(properties.virtualNetworkPeerings)\n| extend State        = tostring(properties.provisioningState)\n| project\n    VNetName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    AddressSpace,\n    SubnetCount,\n    PeeringCount,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, VNetName asc",
+        "size": 0,
+        "title": "Virtual Networks",
+        "noDataMessage": "No Virtual Networks found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-vnets"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.network/networksecuritygroups'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend CustomRuleCount = array_length(properties.securityRules)\n| extend SubnetCount     = array_length(properties.subnets)\n| extend NICCount        = array_length(properties.networkInterfaces)\n| extend State           = tostring(properties.provisioningState)\n| project\n    NSGName         = name,\n    ResourceGroup   = resourceGroup,\n    Location        = location,\n    CustomRuleCount,\n    SubnetCount,\n    NICCount,\n    State,\n    ResourceId      = id\n| order by ResourceGroup asc, NSGName asc",
+        "size": 0,
+        "title": "Network Security Groups",
+        "noDataMessage": "No NSGs found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "CustomRuleCount",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "max": 50,
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-nsgs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.network/publicipaddresses'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend IPAddress        = tostring(properties.ipAddress)\n| extend AllocationMethod = tostring(properties.publicIPAllocationMethod)\n| extend SKU              = tostring(sku.name)\n| extend AssociatedWith   = iff(\n    isnotempty(tostring(properties.ipConfiguration.id)),\n    tostring(split(properties.ipConfiguration.id, '/')[-3]),\n    'Unassociated'\n)\n| extend State            = tostring(properties.provisioningState)\n| project\n    IPName         = name,\n    ResourceGroup  = resourceGroup,\n    Location       = location,\n    IPAddress,\n    AllocationMethod,\n    SKU,\n    AssociatedWith,\n    State,\n    ResourceId     = id\n| order by AssociatedWith asc, ResourceGroup asc",
+        "size": 0,
+        "title": "Public IP Addresses",
+        "noDataMessage": "No Public IPs found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "AssociatedWith",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Unassociated",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-public-ips"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in (\n    'microsoft.network/applicationgateways',\n    'microsoft.network/virtualnetworkgateways'\n)\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend GatewayType = case(\n    type == 'microsoft.network/applicationgateways',    'Application Gateway',\n    type == 'microsoft.network/virtualnetworkgateways', 'VNet Gateway',\n    type\n)\n| extend SKUName  = tostring(sku.name)\n| extend SKUTier  = tostring(sku.tier)\n| extend Capacity = tostring(sku.capacity)\n| extend State    = tostring(properties.provisioningState)\n| project\n    GatewayName   = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    GatewayType,\n    SKUName,\n    SKUTier,\n    Capacity,\n    State,\n    ResourceId    = id\n| order by GatewayType asc, ResourceGroup asc, GatewayName asc",
+        "size": 0,
+        "title": "Application Gateways & VNet Gateways",
+        "noDataMessage": "No gateways found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-gateways"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 🔐 Security & Identity"
+      },
+      "name": "section-security"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.keyvault/vaults'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKU             = tostring(properties.sku.name)\n| extend SoftDelete      = tostring(properties.enableSoftDelete)\n| extend PurgeProtection = tostring(properties.enablePurgeProtection)\n| extend RBACEnabled     = tostring(properties.enableRbacAuthorization)\n| extend State           = tostring(properties.provisioningState)\n| project\n    VaultName     = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKU,\n    SoftDelete,\n    PurgeProtection,\n    RBACEnabled,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, VaultName asc",
+        "size": 0,
+        "title": "Key Vaults",
+        "noDataMessage": "No Key Vaults found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "SoftDelete",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "true",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "PurgeProtection",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "true",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-keyvaults"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.managedidentity/userassignedidentities'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend ClientId    = tostring(properties.clientId)\n| extend PrincipalId = tostring(properties.principalId)\n| project\n    IdentityName  = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    ClientId,\n    PrincipalId,\n    ResourceId    = id\n| order by ResourceGroup asc, IdentityName asc",
+        "size": 0,
+        "title": "User-Assigned Managed Identities",
+        "noDataMessage": "No user-assigned managed identities found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-managed-identities"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityResources\n| where type == 'microsoft.security/pricings'\n| extend PricingTier  = tostring(properties.pricingTier)\n| extend SubPlan      = tostring(properties.subPlan)\n| extend FreeTrialEnd = tostring(properties.freeTrialRemainingTime)\n| project\n    Plan         = name,\n    PricingTier,\n    SubPlan,\n    FreeTrialEnd\n| order by Plan asc",
+        "size": 0,
+        "title": "Microsoft Defender for Cloud — Plan Coverage",
+        "noDataMessage": "No Defender plan data found. Ensure the subscription has Defender for Cloud enabled.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "PricingTier",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Standard",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Free",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-defender"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 🔧 Operational"
+      },
+      "name": "section-ops"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type == 'microsoft.operationalinsights/workspaces'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKU           = tostring(properties.sku.name)\n| extend RetentionDays = toint(properties.retentionInDays)\n| extend DailyCapGB    = tostring(properties.workspaceCapping.dailyQuotaGb)\n| extend State         = tostring(properties.provisioningState)\n| project\n    WorkspaceName = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKU,\n    RetentionDays,\n    DailyCapGB,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, WorkspaceName asc",
+        "size": 0,
+        "title": "Log Analytics Workspaces",
+        "noDataMessage": "No Log Analytics Workspaces found for the selected scope.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "RetentionDays",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 30,
+                "max": 730,
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "ResourceId",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "linkLabel": "Open →"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query-log-analytics"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n> 💡 **To add more resource types** — duplicate any query tile, update the `type` filter in the KQL, and extend/project the relevant `properties.*` fields. All tiles inherit the Subscription and Resource Group filters automatically."
+      },
+      "name": "footer-note"
+    }
+  ],
+  "fallbackResourceIds": [
+    "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7/resourceGroups/global/providers/microsoft.monitor/accounts/Vantage-Production-Monitoring"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
