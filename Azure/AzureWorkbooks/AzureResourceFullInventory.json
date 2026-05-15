@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# 📦 Vantage Analytics — Azure Resource Inventory\n---\nLiving inventory of Azure compute, data, and networking resources. Use the filters to scope by subscription or resource group."
+        "json": "# 📦 Vantage Analytics — Azure Resource Inventory\n---\nLiving inventory of Azure compute, data, and networking resources. Use the filters to scope by subscription, resource group, or tag."
       },
       "name": "workbook-title"
     },
@@ -12,6 +12,9 @@
       "type": 9,
       "content": {
         "version": "KqlParameterItem/1.0",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
         "parameters": [
           {
             "id": "a1b2c3d4-0001-0001-0001-000000000001",
@@ -28,7 +31,10 @@
               ],
               "includeAll": true
             },
-            "defaultValue": "value::all"
+            "defaultValue": "value::all",
+            "value": [
+              "/subscriptions/f643daaa-1b7c-4c74-b0c6-f90b0170d3b7"
+            ]
           },
           {
             "id": "a1b2c3d4-0001-0001-0001-000000000002",
@@ -52,11 +58,47 @@
             "defaultValue": "value::all",
             "queryType": 1,
             "resourceType": "microsoft.resourcegraph/resources"
+          },
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000003",
+            "version": "KqlParameterItem/1.0",
+            "name": "TagKey",
+            "label": "Tag",
+            "type": 2,
+            "query": "Resources\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where isnotempty(tags)\n| project tagKeys = bag_keys(tags)\n| mv-expand tagKeys\n| project tagKey = tostring(tagKeys)\n| where isnotempty(tagKey)\n| summarize by tagKey\n| project value = tagKey, label = tagKey\n| order by label asc",
+            "crossComponentResources": [
+              "{Subscriptions}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [],
+              "showDefault": false
+            },
+            "queryType": 1,
+            "resourceType": "microsoft.resourcegraph/resources",
+            "value": " env"
+          },
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000004",
+            "version": "KqlParameterItem/1.0",
+            "name": "TagValue",
+            "label": "Tag Value",
+            "type": 2,
+            "query": "Resources\n| where '{TagKey}' != '*'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where isnotempty(tags)\n| project tagValue = tostring(tags['{TagKey}'])\n| where isnotempty(tagValue)\n| summarize by tagValue\n| project value = tagValue, label = tagValue\n| order by label asc",
+            "crossComponentResources": [
+              "{Subscriptions}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [],
+              "showDefault": false
+            },
+            "queryType": 1,
+            "resourceType": "microsoft.resourcegraph/resources",
+            "value": "prod"
           }
         ],
         "style": "pills",
-        "queryType": 0,
-        "resourceType": "microsoft.monitor/accounts"
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources"
       },
       "name": "global-parameters"
     },
@@ -71,8 +113,8 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where type in (\n    'microsoft.compute/virtualmachines',\n    'microsoft.compute/virtualmachinescalesets',\n    'microsoft.dbformysql/flexibleservers',\n    'microsoft.dbforpostgresql/flexibleservers',\n    'microsoft.dbformysql/servers',\n    'microsoft.dbforpostgresql/servers',\n    'microsoft.documentdb/databaseaccounts',\n    'microsoft.cache/redis',\n    'microsoft.storage/storageaccounts',\n    'microsoft.web/sites',\n    'microsoft.web/serverfarms',\n    'microsoft.network/virtualnetworks',\n    'microsoft.network/networksecuritygroups',\n    'microsoft.network/publicipaddresses',\n    'microsoft.network/applicationgateways',\n    'microsoft.network/virtualnetworkgateways',\n    'microsoft.keyvault/vaults',\n    'microsoft.managedidentity/userassignedidentities',\n    'microsoft.operationalinsights/workspaces'\n)\n| extend SortOrder = case(\n    type == 'microsoft.compute/virtualmachines',                     1,\n    type == 'microsoft.compute/virtualmachinescalesets',             2,\n    type in ('microsoft.dbformysql/flexibleservers',\n             'microsoft.dbforpostgresql/flexibleservers',\n             'microsoft.dbformysql/servers',\n             'microsoft.dbforpostgresql/servers'),                   3,\n    type == 'microsoft.documentdb/databaseaccounts',                 4,\n    type == 'microsoft.cache/redis',                                 5,\n    type == 'microsoft.storage/storageaccounts',                     6,\n    type == 'microsoft.web/sites',                                   7,\n    type == 'microsoft.web/serverfarms',                             8,\n    type == 'microsoft.network/virtualnetworks',                     9,\n    type == 'microsoft.network/networksecuritygroups',               10,\n    type == 'microsoft.network/publicipaddresses',                   11,\n    type in ('microsoft.network/applicationgateways',\n             'microsoft.network/virtualnetworkgateways'),            12,\n    type == 'microsoft.keyvault/vaults',                             13,\n    type == 'microsoft.managedidentity/userassignedidentities',      14,\n    type == 'microsoft.operationalinsights/workspaces',              15,\n    99\n)\n| extend Category = case(\n    type == 'microsoft.compute/virtualmachines',                     '🖥️ Virtual Machines',\n    type == 'microsoft.compute/virtualmachinescalesets',             '📈 VM Scale Sets',\n    type in ('microsoft.dbformysql/flexibleservers',\n             'microsoft.dbforpostgresql/flexibleservers',\n             'microsoft.dbformysql/servers',\n             'microsoft.dbforpostgresql/servers'),                   '🗄️ Databases',\n    type == 'microsoft.documentdb/databaseaccounts',                 '🌌 Cosmos DB',\n    type == 'microsoft.cache/redis',                                 '🔴 Redis Cache',\n    type == 'microsoft.storage/storageaccounts',                     '💾 Storage Accounts',\n    type == 'microsoft.web/sites',                                   '⚡ Function / Web Apps',\n    type == 'microsoft.web/serverfarms',                             '⚡ App Service Plans',\n    type == 'microsoft.network/virtualnetworks',                     '🌐 Virtual Networks',\n    type == 'microsoft.network/networksecuritygroups',               '🌐 NSGs',\n    type == 'microsoft.network/publicipaddresses',                   '🌐 Public IPs',\n    type in ('microsoft.network/applicationgateways',\n             'microsoft.network/virtualnetworkgateways'),            '🌐 Gateways',\n    type == 'microsoft.keyvault/vaults',                             '🔐 Key Vaults',\n    type == 'microsoft.managedidentity/userassignedidentities',      '🔐 Managed Identities',\n    type == 'microsoft.operationalinsights/workspaces',              '🔧 Log Analytics',\n    type\n)\n| summarize Count = count() by Category, SortOrder\n| order by SortOrder asc",
-        "size": 3,
+        "query": "Resources\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| where type in (\n    'microsoft.compute/virtualmachines',\n    'microsoft.compute/virtualmachinescalesets',\n    'microsoft.dbformysql/flexibleservers',\n    'microsoft.dbforpostgresql/flexibleservers',\n    'microsoft.dbformysql/servers',\n    'microsoft.dbforpostgresql/servers',\n    'microsoft.documentdb/databaseaccounts',\n    'microsoft.cache/redis',\n    'microsoft.storage/storageaccounts',\n    'microsoft.web/sites',\n    'microsoft.web/serverfarms',\n    'microsoft.network/virtualnetworks',\n    'microsoft.network/networksecuritygroups',\n    'microsoft.network/publicipaddresses',\n    'microsoft.network/applicationgateways',\n    'microsoft.network/virtualnetworkgateways',\n    'microsoft.keyvault/vaults',\n    'microsoft.managedidentity/userassignedidentities',\n    'microsoft.operationalinsights/workspaces'\n)\n| extend SortOrder = case(\n    type == 'microsoft.compute/virtualmachines',                    1,\n    type == 'microsoft.compute/virtualmachinescalesets',            2,\n    type in ('microsoft.dbformysql/flexibleservers',\n             'microsoft.dbforpostgresql/flexibleservers',\n             'microsoft.dbformysql/servers',\n             'microsoft.dbforpostgresql/servers'),                  3,\n    type == 'microsoft.documentdb/databaseaccounts',                4,\n    type == 'microsoft.cache/redis',                                5,\n    type == 'microsoft.storage/storageaccounts',                    6,\n    type == 'microsoft.web/sites',                                  7,\n    type == 'microsoft.web/serverfarms',                            8,\n    type == 'microsoft.network/virtualnetworks',                    9,\n    type == 'microsoft.network/networksecuritygroups',              10,\n    type == 'microsoft.network/publicipaddresses',                  11,\n    type in ('microsoft.network/applicationgateways',\n             'microsoft.network/virtualnetworkgateways'),           12,\n    type == 'microsoft.keyvault/vaults',                            13,\n    type == 'microsoft.managedidentity/userassignedidentities',     14,\n    type == 'microsoft.operationalinsights/workspaces',             15,\n    99\n)\n| extend Category = case(\n    type == 'microsoft.compute/virtualmachines',                    '🖥️ Virtual Machines',\n    type == 'microsoft.compute/virtualmachinescalesets',            '📈 VM Scale Sets',\n    type in ('microsoft.dbformysql/flexibleservers',\n             'microsoft.dbforpostgresql/flexibleservers',\n             'microsoft.dbformysql/servers',\n             'microsoft.dbforpostgresql/servers'),                  '🗄️ Databases',\n    type == 'microsoft.documentdb/databaseaccounts',                '🌌 Cosmos DB',\n    type == 'microsoft.cache/redis',                                '🔴 Redis Cache',\n    type == 'microsoft.storage/storageaccounts',                    '💾 Storage Accounts',\n    type == 'microsoft.web/sites',                                  '⚡ Function / Web Apps',\n    type == 'microsoft.web/serverfarms',                            '⚡ App Service Plans',\n    type == 'microsoft.network/virtualnetworks',                    '🌐 Virtual Networks',\n    type == 'microsoft.network/networksecuritygroups',              '🌐 NSGs',\n    type == 'microsoft.network/publicipaddresses',                  '🌐 Public IPs',\n    type in ('microsoft.network/applicationgateways',\n             'microsoft.network/virtualnetworkgateways'),           '🌐 Gateways',\n    type == 'microsoft.keyvault/vaults',                            '🔐 Key Vaults',\n    type == 'microsoft.managedidentity/userassignedidentities',     '🔐 Managed Identities',\n    type == 'microsoft.operationalinsights/workspaces',             '🔧 Log Analytics',\n    type\n)\n| summarize Count = count() by Category, SortOrder\n| order by SortOrder asc",
+        "size": 4,
         "title": "Resource Counts by Type",
         "noDataMessage": "No resources found for the selected scope.",
         "queryType": 1,
@@ -116,8 +158,8 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend GuestOSName    = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion = tostring(properties.extended.instanceView.osVersion)\n| extend OSDetail       = strcat(GuestOSName, ' ', GuestOSVersion)\n| extend EOLDate = case(\n    OSDetail contains 'CentOS' and OSDetail contains '6.',  'Jun 30, 2020',\n    OSDetail contains 'CentOS' and OSDetail contains '7.',  'Jun 30, 2024',\n    OSDetail contains 'CentOS' and OSDetail contains '8.',  'Dec 31, 2021',\n    OSDetail contains 'Ubuntu' and OSDetail contains '16.04', 'Apr 30, 2021',\n    OSDetail contains 'Ubuntu' and OSDetail contains '18.04', 'Apr 30, 2023',\n    OSDetail contains 'Ubuntu' and OSDetail contains '20.04', 'Apr 2, 2025',\n    OSDetail contains '2008',  'Jan 14, 2020',\n    OSDetail contains '2012',  'Oct 10, 2023',\n    OSDetail contains '2016',  'Jan 12, 2027',\n    ''\n)\n| extend Severity = case(\n    OSDetail contains '2016',                               'Warning — EOL Jan 2027',\n    OSDetail contains 'Ubuntu' and OSDetail contains '20.04', 'Warning — EOL Apr 2025',\n    isnotempty(EOLDate),                                    'Critical — Past EOL',\n    ''\n)\n| where isnotempty(EOLDate)\n| project\n    VMName        = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    OSDetail,\n    EOLDate,\n    Severity,\n    VMSize        = tostring(properties.hardwareProfile.vmSize),\n    ResourceId    = id\n| order by Severity asc, VMName asc",
-        "size": 3,
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend GuestOSName    = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion = tostring(properties.extended.instanceView.osVersion)\n| extend OSDetail       = strcat(GuestOSName, ' ', GuestOSVersion)\n| extend EOLDate = case(\n    OSDetail contains 'CentOS' and OSDetail contains '6.',    'Jun 30, 2020',\n    OSDetail contains 'CentOS' and OSDetail contains '7.',    'Jun 30, 2024',\n    OSDetail contains 'CentOS' and OSDetail contains '8.',    'Dec 31, 2021',\n    OSDetail contains 'Ubuntu' and OSDetail contains '16.04', 'Apr 30, 2021',\n    OSDetail contains 'Ubuntu' and OSDetail contains '18.04', 'Apr 30, 2023',\n    OSDetail contains 'Ubuntu' and OSDetail contains '20.04', 'Apr 2, 2025',\n    OSDetail contains '2008',  'Jan 14, 2020',\n    OSDetail contains '2012',  'Oct 10, 2023',\n    OSDetail contains '2016',  'Jan 12, 2027',\n    ''\n)\n| extend Severity = case(\n    OSDetail contains '2016',                                 'Warning — EOL Jan 2027',\n    OSDetail contains 'Ubuntu' and OSDetail contains '20.04', 'Warning — EOL Apr 2025',\n    isnotempty(EOLDate),                                      'Critical — Past EOL',\n    ''\n)\n| where isnotempty(EOLDate)\n| project VMName = name, ResourceGroup = resourceGroup, Location = location, OSDetail, EOLDate, Severity, VMSize = tostring(properties.hardwareProfile.vmSize), ResourceId = id\n| order by Severity asc, VMName asc",
+        "size": 0,
         "title": "🖥️ VMs Running EOL Operating Systems",
         "noDataMessage": "✅ No VMs with known EOL operating systems detected.",
         "queryType": 1,
@@ -172,8 +214,8 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend GuestOSName    = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion = tostring(properties.extended.instanceView.osVersion)\n| extend PowerState     = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where isempty(GuestOSName) and PowerState contains 'running'\n| project\n    VMName        = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    PowerState,\n    VMSize        = tostring(properties.hardwareProfile.vmSize),\n    Note          = 'VM is running but guest agent is not reporting — OS cannot be inventoried or patched remotely',\n    ResourceId    = id\n| order by ResourceGroup asc, VMName asc",
-        "size": 3,
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend GuestOSName = tostring(properties.extended.instanceView.osName)\n| extend PowerState  = tostring(properties.extended.instanceView.powerState.displayStatus)\n| where isempty(GuestOSName) and PowerState contains 'running'\n| project VMName = name, ResourceGroup = resourceGroup, Location = location, PowerState, VMSize = tostring(properties.hardwareProfile.vmSize), Note = 'VM is running but guest agent is not reporting — OS cannot be inventoried or patched remotely', ResourceId = id\n| order by ResourceGroup asc, VMName asc",
+        "size": 0,
         "title": "🖥️ Running VMs with Guest Agent Not Reporting",
         "noDataMessage": "✅ All running VMs have an active guest agent.",
         "queryType": 1,
@@ -216,8 +258,8 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in ('microsoft.dbformysql/servers', 'microsoft.dbforpostgresql/servers')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Engine = case(\n    type == 'microsoft.dbformysql/servers',        'MySQL Single Server',\n    type == 'microsoft.dbforpostgresql/servers',   'PostgreSQL Single Server',\n    type\n)\n| extend RetiredDate = case(\n    type == 'microsoft.dbformysql/servers',        'Sep 16, 2024',\n    type == 'microsoft.dbforpostgresql/servers',   'Mar 28, 2025',\n    ''\n)\n| extend MigrationTarget = case(\n    type == 'microsoft.dbformysql/servers',        'MySQL Flexible Server',\n    type == 'microsoft.dbforpostgresql/servers',   'PostgreSQL Flexible Server',\n    ''\n)\n| extend Version = tostring(properties.version)\n| extend State   = tostring(properties.userVisibleState)\n| project\n    ServerName      = name,\n    ResourceGroup   = resourceGroup,\n    Location        = location,\n    Engine,\n    Version,\n    State,\n    RetiredDate,\n    MigrationTarget,\n    ResourceId      = id\n| order by Engine asc, ServerName asc",
-        "size": 3,
+        "query": "Resources\n| where type in ('microsoft.dbformysql/servers', 'microsoft.dbforpostgresql/servers')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend Engine = case(\n    type == 'microsoft.dbformysql/servers',        'MySQL Single Server',\n    type == 'microsoft.dbforpostgresql/servers',   'PostgreSQL Single Server',\n    type\n)\n| extend RetiredDate = case(\n    type == 'microsoft.dbformysql/servers',        'Sep 16, 2024',\n    type == 'microsoft.dbforpostgresql/servers',   'Mar 28, 2025',\n    ''\n)\n| extend MigrationTarget = case(\n    type == 'microsoft.dbformysql/servers',        'MySQL Flexible Server',\n    type == 'microsoft.dbforpostgresql/servers',   'PostgreSQL Flexible Server',\n    ''\n)\n| extend Version = tostring(properties.version)\n| extend State   = tostring(properties.userVisibleState)\n| project ServerName = name, ResourceGroup = resourceGroup, Location = location, Engine, Version, State, RetiredDate, MigrationTarget, ResourceId = id\n| order by Engine asc, ServerName asc",
+        "size": 0,
         "title": "🗄️ Retired Database Tiers (Single Server)",
         "noDataMessage": "✅ No retired Single Server database instances found.",
         "queryType": 1,
@@ -275,8 +317,8 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in ('microsoft.storage/storageaccounts', 'microsoft.cache/redis')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend MinTLS      = tostring(properties.minimumTlsVersion)\n| extend ResourceType = case(\n    type == 'microsoft.storage/storageaccounts', 'Storage Account',\n    type == 'microsoft.cache/redis',             'Redis Cache',\n    type\n)\n| extend TLSDisplay = iff(isempty(MinTLS), 'Not set (defaults to TLS 1.0)', MinTLS)\n| extend Severity = case(\n    MinTLS == 'TLS1_0' or isempty(MinTLS), 'Critical — TLS 1.0 allowed',\n    MinTLS == 'TLS1_1',                    'Warning — TLS 1.1 allowed',\n    ''\n)\n| where MinTLS in ('TLS1_0', 'TLS1_1') or isempty(MinTLS)\n| project\n    ResourceName  = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    ResourceType,\n    TLSDisplay,\n    Severity,\n    ResourceId    = id\n| order by Severity asc, ResourceType asc, ResourceName asc",
-        "size": 3,
+        "query": "Resources\n| where type in ('microsoft.storage/storageaccounts', 'microsoft.cache/redis')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend MinTLS       = tostring(properties.minimumTlsVersion)\n| extend ResourceType = case(\n    type == 'microsoft.storage/storageaccounts', 'Storage Account',\n    type == 'microsoft.cache/redis',             'Redis Cache',\n    type\n)\n| extend TLSDisplay = iff(isempty(MinTLS), 'Not set (defaults to TLS 1.0)', MinTLS)\n| extend Severity = case(\n    MinTLS == 'TLS1_0' or isempty(MinTLS), 'Critical — TLS 1.0 allowed',\n    MinTLS == 'TLS1_1',                    'Warning — TLS 1.1 allowed',\n    ''\n)\n| where MinTLS in ('TLS1_0', 'TLS1_1') or isempty(MinTLS)\n| project ResourceName = name, ResourceGroup = resourceGroup, Location = location, ResourceType, TLSDisplay, Severity, ResourceId = id\n| order by Severity asc, ResourceType asc, ResourceName asc",
+        "size": 0,
         "title": "🔐 Resources Permitting TLS Below 1.2",
         "noDataMessage": "✅ All storage accounts and Redis instances enforce TLS 1.2 or higher.",
         "queryType": 1,
@@ -338,7 +380,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend OSType           = tostring(properties.storageProfile.osDisk.osType)\n| extend MarketplaceOffer = tostring(properties.storageProfile.imageReference.offer)\n| extend MarketplaceSku   = tostring(properties.storageProfile.imageReference.sku)\n| extend CustomImageId    = tostring(properties.storageProfile.imageReference.id)\n| extend CustomImageName  = tostring(split(CustomImageId, '/')[-1])\n| extend GuestOSName      = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion   = tostring(properties.extended.instanceView.osVersion)\n| extend PowerState       = tostring(properties.extended.instanceView.powerState.displayStatus)\n| extend ImageSource = case(\n    isnotempty(MarketplaceOffer), strcat(MarketplaceOffer, ' | ', MarketplaceSku),\n    isnotempty(CustomImageName),  strcat('Custom: ', CustomImageName),\n    'Unknown'\n)\n| extend OSDetail = case(\n    isnotempty(GuestOSName), strcat(GuestOSName, ' ', GuestOSVersion),\n    'Agent not reporting'\n)\n| project\n    VMName        = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    PowerState,\n    OSType,\n    OSDetail,\n    ImageSource,\n    VMSize        = tostring(properties.hardwareProfile.vmSize),\n    ResourceId    = id\n| order by ResourceGroup asc, VMName asc",
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachines'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend OSType           = tostring(properties.storageProfile.osDisk.osType)\n| extend MarketplaceOffer = tostring(properties.storageProfile.imageReference.offer)\n| extend MarketplaceSku   = tostring(properties.storageProfile.imageReference.sku)\n| extend CustomImageId    = tostring(properties.storageProfile.imageReference.id)\n| extend CustomImageName  = tostring(split(CustomImageId, '/')[-1])\n| extend GuestOSName      = tostring(properties.extended.instanceView.osName)\n| extend GuestOSVersion   = tostring(properties.extended.instanceView.osVersion)\n| extend PowerState       = tostring(properties.extended.instanceView.powerState.displayStatus)\n| extend ImageSource = case(\n    isnotempty(MarketplaceOffer), strcat(MarketplaceOffer, ' | ', MarketplaceSku),\n    isnotempty(CustomImageName),  strcat('Custom: ', CustomImageName),\n    'Unknown'\n)\n| extend OSDetail = case(\n    isnotempty(GuestOSName), strcat(GuestOSName, ' ', GuestOSVersion),\n    'Agent not reporting'\n)\n| project VMName = name, ResourceGroup = resourceGroup, Location = location, PowerState, OSType, OSDetail, ImageSource, VMSize = tostring(properties.hardwareProfile.vmSize), ResourceId = id\n| order by ResourceGroup asc, VMName asc",
         "size": 0,
         "title": "Virtual Machine Inventory",
         "noDataMessage": "No VMs found for the selected scope.",
@@ -434,7 +476,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.compute/virtualmachinescalesets'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKUName       = tostring(sku.name)\n| extend Capacity      = toint(sku.capacity)\n| extend UpgradePolicy = tostring(properties.upgradePolicy.mode)\n| extend OverProvision = tostring(properties.overprovision)\n| extend State         = tostring(properties.provisioningState)\n| project\n    VMSSName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKUName,\n    Capacity,\n    UpgradePolicy,\n    OverProvision,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, VMSSName asc",
+        "query": "Resources\n| where type == 'microsoft.compute/virtualmachinescalesets'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend SKUName       = tostring(sku.name)\n| extend Capacity      = toint(sku.capacity)\n| extend UpgradePolicy = tostring(properties.upgradePolicy.mode)\n| extend OverProvision = tostring(properties.overprovision)\n| extend State         = tostring(properties.provisioningState)\n| project VMSSName = name, ResourceGroup = resourceGroup, Location = location, SKUName, Capacity, UpgradePolicy, OverProvision, State, ResourceId = id\n| order by ResourceGroup asc, VMSSName asc",
         "size": 0,
         "title": "VM Scale Set Inventory",
         "noDataMessage": "No VMSS found for the selected scope.",
@@ -500,7 +542,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in (\n    'microsoft.dbformysql/flexibleservers',\n    'microsoft.dbforpostgresql/flexibleservers',\n    'microsoft.dbforpostgresql/servers',\n    'microsoft.dbformysql/servers'\n)\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Engine = case(\n    type == 'microsoft.dbformysql/flexibleservers',      'MySQL Flexible',\n    type == 'microsoft.dbforpostgresql/flexibleservers', 'PostgreSQL Flexible',\n    type == 'microsoft.dbforpostgresql/servers',         'PostgreSQL Single ⚠️',\n    type == 'microsoft.dbformysql/servers',              'MySQL Single ⚠️',\n    type\n)\n| extend Version   = tostring(properties.version)\n| extend SKU       = tostring(sku.name)\n| extend Tier      = tostring(sku.tier)\n| extend StorageGB = tostring(properties.storage.storageSizeGB)\n| extend State     = tostring(properties.state)\n| project\n    ServerName    = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    Engine,\n    Version,\n    Tier,\n    SKU,\n    StorageGB,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, ServerName asc",
+        "query": "Resources\n| where type in ('microsoft.dbformysql/flexibleservers','microsoft.dbforpostgresql/flexibleservers','microsoft.dbforpostgresql/servers','microsoft.dbformysql/servers')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend Engine = case(\n    type == 'microsoft.dbformysql/flexibleservers',      'MySQL Flexible',\n    type == 'microsoft.dbforpostgresql/flexibleservers', 'PostgreSQL Flexible',\n    type == 'microsoft.dbforpostgresql/servers',         'PostgreSQL Single ⚠️',\n    type == 'microsoft.dbformysql/servers',              'MySQL Single ⚠️',\n    type\n)\n| extend Version = tostring(properties.version)\n| extend SKU     = tostring(sku.name)\n| extend Tier    = tostring(sku.tier)\n| extend StorageGB = tostring(properties.storage.storageSizeGB)\n| extend State   = tostring(properties.state)\n| project ServerName = name, ResourceGroup = resourceGroup, Location = location, Engine, Version, Tier, SKU, StorageGB, State, ResourceId = id\n| order by ResourceGroup asc, ServerName asc",
         "size": 0,
         "title": "MySQL & PostgreSQL Servers",
         "noDataMessage": "No MySQL or PostgreSQL servers found for the selected scope.",
@@ -550,7 +592,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.documentdb/databaseaccounts'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Kind             = tostring(kind)\n| extend ConsistencyLevel = tostring(properties.consistencyPolicy.defaultConsistencyLevel)\n| extend PrimaryLocation  = tostring(properties.locations[0].locationName)\n| extend FreeTier         = tostring(properties.enableFreeTier)\n| extend State            = tostring(properties.provisioningState)\n| project\n    AccountName      = name,\n    ResourceGroup    = resourceGroup,\n    Location         = location,\n    Kind,\n    ConsistencyLevel,\n    PrimaryLocation,\n    FreeTier,\n    State,\n    ResourceId       = id\n| order by ResourceGroup asc, AccountName asc",
+        "query": "Resources\n| where type == 'microsoft.documentdb/databaseaccounts'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend Kind             = tostring(kind)\n| extend ConsistencyLevel = tostring(properties.consistencyPolicy.defaultConsistencyLevel)\n| extend PrimaryLocation  = tostring(properties.locations[0].locationName)\n| extend FreeTier         = tostring(properties.enableFreeTier)\n| extend State            = tostring(properties.provisioningState)\n| project AccountName = name, ResourceGroup = resourceGroup, Location = location, Kind, ConsistencyLevel, PrimaryLocation, FreeTier, State, ResourceId = id\n| order by ResourceGroup asc, AccountName asc",
         "size": 0,
         "title": "Cosmos DB Accounts",
         "noDataMessage": "No Cosmos DB accounts found for the selected scope.",
@@ -586,8 +628,8 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.cache/redis'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKUName       = tostring(sku.name)\n| extend SKUFamily     = tostring(sku.family)\n| extend Capacity      = tostring(sku.capacity)\n| extend RedisVersion  = tostring(properties.redisVersion)\n| extend SSLOnly       = iff(tostring(properties.enableNonSslPort) == 'true', 'No', 'Yes')\n| extend MinTLSVersion = tostring(properties.minimumTlsVersion)\n| extend State         = tostring(properties.provisioningState)\n| project\n    CacheName     = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKUName,\n    SKUFamily,\n    Capacity,\n    RedisVersion,\n    SSLOnly,\n    MinTLSVersion,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, CacheName asc",
-        "size": 3,
+        "query": "Resources\n| where type == 'microsoft.cache/redis'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend SKUName       = tostring(sku.name)\n| extend SKUFamily     = tostring(sku.family)\n| extend Capacity      = tostring(sku.capacity)\n| extend RedisVersion  = tostring(properties.redisVersion)\n| extend SSLOnly       = iff(tostring(properties.enableNonSslPort) == 'true', 'No', 'Yes')\n| extend MinTLSVersion = tostring(properties.minimumTlsVersion)\n| extend State         = tostring(properties.provisioningState)\n| project CacheName = name, ResourceGroup = resourceGroup, Location = location, SKUName, SKUFamily, Capacity, RedisVersion, SSLOnly, MinTLSVersion, State, ResourceId = id\n| order by ResourceGroup asc, CacheName asc",
+        "size": 0,
         "title": "Redis Cache Instances",
         "noDataMessage": "No Redis Cache instances found for the selected scope.",
         "queryType": 1,
@@ -664,7 +706,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.storage/storageaccounts'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend Kind             = tostring(kind)\n| extend SKU              = tostring(sku.name)\n| extend AccessTier       = tostring(properties.accessTier)\n| extend PublicBlobAccess = tostring(properties.allowBlobPublicAccess)\n| extend HTTPSOnly        = tostring(properties.supportsHttpsTrafficOnly)\n| extend MinTLSVersion    = tostring(properties.minimumTlsVersion)\n| extend State            = tostring(properties.provisioningState)\n| project\n    AccountName       = name,\n    ResourceGroup     = resourceGroup,\n    Location          = location,\n    Kind,\n    SKU,\n    AccessTier,\n    PublicBlobAccess,\n    HTTPSOnly,\n    MinTLSVersion,\n    State,\n    ResourceId        = id\n| order by ResourceGroup asc, AccountName asc",
+        "query": "Resources\n| where type == 'microsoft.storage/storageaccounts'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend Kind             = tostring(kind)\n| extend SKU              = tostring(sku.name)\n| extend AccessTier       = tostring(properties.accessTier)\n| extend PublicBlobAccess = tostring(properties.allowBlobPublicAccess)\n| extend HTTPSOnly        = tostring(properties.supportsHttpsTrafficOnly)\n| extend MinTLSVersion    = tostring(properties.minimumTlsVersion)\n| extend State            = tostring(properties.provisioningState)\n| project AccountName = name, ResourceGroup = resourceGroup, Location = location, Kind, SKU, AccessTier, PublicBlobAccess, HTTPSOnly, MinTLSVersion, State, ResourceId = id\n| order by ResourceGroup asc, AccountName asc",
         "size": 0,
         "title": "Storage Accounts",
         "noDataMessage": "No Storage Accounts found for the selected scope.",
@@ -741,7 +783,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.compute/disks'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where properties.diskState == 'Unattached'\n| extend DiskSizeGB  = toint(properties.diskSizeGB)\n| extend SKU         = tostring(sku.name)\n| extend OSType      = tostring(properties.osType)\n| extend CreatedTime = tostring(properties.timeCreated)\n| project\n    DiskName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKU,\n    DiskSizeGB,\n    OSType,\n    CreatedTime,\n    ResourceId    = id\n| order by DiskSizeGB desc, ResourceGroup asc",
+        "query": "Resources\n| where type == 'microsoft.compute/disks'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| where properties.diskState == 'Unattached'\n| extend DiskSizeGB  = toint(properties.diskSizeGB)\n| extend SKU         = tostring(sku.name)\n| extend OSType      = tostring(properties.osType)\n| extend CreatedTime = tostring(properties.timeCreated)\n| project DiskName = name, ResourceGroup = resourceGroup, Location = location, SKU, DiskSizeGB, OSType, CreatedTime, ResourceId = id\n| order by DiskSizeGB desc, ResourceGroup asc",
         "size": 0,
         "title": "⚠️ Unattached Managed Disks (potential cost leak)",
         "noDataMessage": "✅ No unattached disks found — nothing to clean up.",
@@ -786,7 +828,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.web/sites'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend AppKind      = case(\n    kind contains 'functionapp', 'Function App',\n    kind contains 'app',         'Web App / API',\n    kind\n)\n| extend OSKind       = iff(kind contains 'linux', 'Linux', 'Windows')\n| extend RuntimeStack = tostring(properties.siteConfig.linuxFxVersion)\n| extend HostName     = tostring(properties.defaultHostName)\n| extend State        = tostring(properties.state)\n| project\n    AppName       = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    AppKind,\n    OSKind,\n    RuntimeStack,\n    HostName,\n    State,\n    ResourceId    = id\n| order by AppKind asc, ResourceGroup asc, AppName asc",
+        "query": "Resources\n| where type == 'microsoft.web/sites'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend AppKind      = case(kind contains 'functionapp', 'Function App', kind contains 'app', 'Web App / API', kind)\n| extend OSKind       = iff(kind contains 'linux', 'Linux', 'Windows')\n| extend RuntimeStack = tostring(properties.siteConfig.linuxFxVersion)\n| extend HostName     = tostring(properties.defaultHostName)\n| extend State        = tostring(properties.state)\n| project AppName = name, ResourceGroup = resourceGroup, Location = location, AppKind, OSKind, RuntimeStack, HostName, State, ResourceId = id\n| order by AppKind asc, ResourceGroup asc, AppName asc",
         "size": 0,
         "title": "Function Apps & Web Apps",
         "noDataMessage": "No Function Apps or Web Apps found for the selected scope.",
@@ -836,7 +878,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.web/serverfarms'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKUName  = tostring(sku.name)\n| extend SKUTier  = tostring(sku.tier)\n| extend OSKind   = iff(kind contains 'linux', 'Linux', 'Windows')\n| extend AppCount = toint(properties.numberOfSites)\n| extend Workers  = toint(properties.numberOfWorkers)\n| extend State    = tostring(properties.status)\n| project\n    PlanName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKUName,\n    SKUTier,\n    OSKind,\n    AppCount,\n    Workers,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, PlanName asc",
+        "query": "Resources\n| where type == 'microsoft.web/serverfarms'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend SKUName  = tostring(sku.name)\n| extend SKUTier  = tostring(sku.tier)\n| extend OSKind   = iff(kind contains 'linux', 'Linux', 'Windows')\n| extend AppCount = toint(properties.numberOfSites)\n| extend Workers  = toint(properties.numberOfWorkers)\n| extend State    = tostring(properties.status)\n| project PlanName = name, ResourceGroup = resourceGroup, Location = location, SKUName, SKUTier, OSKind, AppCount, Workers, State, ResourceId = id\n| order by ResourceGroup asc, PlanName asc",
         "size": 0,
         "title": "App Service Plans",
         "noDataMessage": "No App Service Plans found for the selected scope.",
@@ -881,7 +923,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.network/virtualnetworks'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend AddressSpace = tostring(properties.addressSpace.addressPrefixes)\n| extend SubnetCount  = array_length(properties.subnets)\n| extend PeeringCount = array_length(properties.virtualNetworkPeerings)\n| extend State        = tostring(properties.provisioningState)\n| project\n    VNetName      = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    AddressSpace,\n    SubnetCount,\n    PeeringCount,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, VNetName asc",
+        "query": "Resources\n| where type == 'microsoft.network/virtualnetworks'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend AddressSpace = tostring(properties.addressSpace.addressPrefixes)\n| extend SubnetCount  = array_length(properties.subnets)\n| extend PeeringCount = array_length(properties.virtualNetworkPeerings)\n| extend State        = tostring(properties.provisioningState)\n| project VNetName = name, ResourceGroup = resourceGroup, Location = location, AddressSpace, SubnetCount, PeeringCount, State, ResourceId = id\n| order by ResourceGroup asc, VNetName asc",
         "size": 0,
         "title": "Virtual Networks",
         "noDataMessage": "No Virtual Networks found for the selected scope.",
@@ -910,7 +952,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.network/networksecuritygroups'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend CustomRuleCount = array_length(properties.securityRules)\n| extend SubnetCount     = array_length(properties.subnets)\n| extend NICCount        = array_length(properties.networkInterfaces)\n| extend State           = tostring(properties.provisioningState)\n| project\n    NSGName         = name,\n    ResourceGroup   = resourceGroup,\n    Location        = location,\n    CustomRuleCount,\n    SubnetCount,\n    NICCount,\n    State,\n    ResourceId      = id\n| order by ResourceGroup asc, NSGName asc",
+        "query": "Resources\n| where type == 'microsoft.network/networksecuritygroups'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend CustomRuleCount = array_length(properties.securityRules)\n| extend SubnetCount     = array_length(properties.subnets)\n| extend NICCount        = array_length(properties.networkInterfaces)\n| extend State           = tostring(properties.provisioningState)\n| project NSGName = name, ResourceGroup = resourceGroup, Location = location, CustomRuleCount, SubnetCount, NICCount, State, ResourceId = id\n| order by ResourceGroup asc, NSGName asc",
         "size": 0,
         "title": "Network Security Groups",
         "noDataMessage": "No NSGs found for the selected scope.",
@@ -948,7 +990,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.network/publicipaddresses'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend IPAddress        = tostring(properties.ipAddress)\n| extend AllocationMethod = tostring(properties.publicIPAllocationMethod)\n| extend SKU              = tostring(sku.name)\n| extend AssociatedWith   = iff(\n    isnotempty(tostring(properties.ipConfiguration.id)),\n    tostring(split(properties.ipConfiguration.id, '/')[-3]),\n    'Unassociated'\n)\n| extend State            = tostring(properties.provisioningState)\n| project\n    IPName         = name,\n    ResourceGroup  = resourceGroup,\n    Location       = location,\n    IPAddress,\n    AllocationMethod,\n    SKU,\n    AssociatedWith,\n    State,\n    ResourceId     = id\n| order by AssociatedWith asc, ResourceGroup asc",
+        "query": "Resources\n| where type == 'microsoft.network/publicipaddresses'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend IPAddress        = tostring(properties.ipAddress)\n| extend AllocationMethod = tostring(properties.publicIPAllocationMethod)\n| extend SKU              = tostring(sku.name)\n| extend AssociatedWith   = iff(isnotempty(tostring(properties.ipConfiguration.id)), tostring(split(properties.ipConfiguration.id, '/')[-3]), 'Unassociated')\n| extend State            = tostring(properties.provisioningState)\n| project IPName = name, ResourceGroup = resourceGroup, Location = location, IPAddress, AllocationMethod, SKU, AssociatedWith, State, ResourceId = id\n| order by AssociatedWith asc, ResourceGroup asc",
         "size": 0,
         "title": "Public IP Addresses",
         "noDataMessage": "No Public IPs found for the selected scope.",
@@ -998,8 +1040,8 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in (\n    'microsoft.network/applicationgateways',\n    'microsoft.network/virtualnetworkgateways'\n)\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend GatewayType = case(\n    type == 'microsoft.network/applicationgateways',    'Application Gateway',\n    type == 'microsoft.network/virtualnetworkgateways', 'VNet Gateway',\n    type\n)\n| extend SKUName  = tostring(sku.name)\n| extend SKUTier  = tostring(sku.tier)\n| extend Capacity = tostring(sku.capacity)\n| extend State    = tostring(properties.provisioningState)\n| project\n    GatewayName   = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    GatewayType,\n    SKUName,\n    SKUTier,\n    Capacity,\n    State,\n    ResourceId    = id\n| order by GatewayType asc, ResourceGroup asc, GatewayName asc",
-        "size": 3,
+        "query": "Resources\n| where type in ('microsoft.network/applicationgateways','microsoft.network/virtualnetworkgateways')\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend GatewayType = case(type == 'microsoft.network/applicationgateways', 'Application Gateway', type == 'microsoft.network/virtualnetworkgateways', 'VNet Gateway', type)\n| extend SKUName  = tostring(sku.name)\n| extend SKUTier  = tostring(sku.tier)\n| extend Capacity = tostring(sku.capacity)\n| extend State    = tostring(properties.provisioningState)\n| project GatewayName = name, ResourceGroup = resourceGroup, Location = location, GatewayType, SKUName, SKUTier, Capacity, State, ResourceId = id\n| order by GatewayType asc, ResourceGroup asc, GatewayName asc",
+        "size": 0,
         "title": "Application Gateways & VNet Gateways",
         "noDataMessage": "No gateways found for the selected scope.",
         "queryType": 1,
@@ -1034,7 +1076,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.keyvault/vaults'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKU             = tostring(properties.sku.name)\n| extend SoftDelete      = tostring(properties.enableSoftDelete)\n| extend PurgeProtection = tostring(properties.enablePurgeProtection)\n| extend RBACEnabled     = tostring(properties.enableRbacAuthorization)\n| extend State           = tostring(properties.provisioningState)\n| project\n    VaultName     = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKU,\n    SoftDelete,\n    PurgeProtection,\n    RBACEnabled,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, VaultName asc",
+        "query": "Resources\n| where type == 'microsoft.keyvault/vaults'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend SKU             = tostring(properties.sku.name)\n| extend SoftDelete      = tostring(properties.enableSoftDelete)\n| extend PurgeProtection = tostring(properties.enablePurgeProtection)\n| extend RBACEnabled     = tostring(properties.enableRbacAuthorization)\n| extend State           = tostring(properties.provisioningState)\n| project VaultName = name, ResourceGroup = resourceGroup, Location = location, SKU, SoftDelete, PurgeProtection, RBACEnabled, State, ResourceId = id\n| order by ResourceGroup asc, VaultName asc",
         "size": 0,
         "title": "Key Vaults",
         "noDataMessage": "No Key Vaults found for the selected scope.",
@@ -1105,7 +1147,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.managedidentity/userassignedidentities'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend ClientId    = tostring(properties.clientId)\n| extend PrincipalId = tostring(properties.principalId)\n| project\n    IdentityName  = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    ClientId,\n    PrincipalId,\n    ResourceId    = id\n| order by ResourceGroup asc, IdentityName asc",
+        "query": "Resources\n| where type == 'microsoft.managedidentity/userassignedidentities'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend ClientId    = tostring(properties.clientId)\n| extend PrincipalId = tostring(properties.principalId)\n| project IdentityName = name, ResourceGroup = resourceGroup, Location = location, ClientId, PrincipalId, ResourceId = id\n| order by ResourceGroup asc, IdentityName asc",
         "size": 0,
         "title": "User-Assigned Managed Identities",
         "noDataMessage": "No user-assigned managed identities found for the selected scope.",
@@ -1134,7 +1176,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "SecurityResources\n| where type == 'microsoft.security/pricings'\n| extend PricingTier  = tostring(properties.pricingTier)\n| extend SubPlan      = tostring(properties.subPlan)\n| extend FreeTrialEnd = tostring(properties.freeTrialRemainingTime)\n| project\n    Plan         = name,\n    PricingTier,\n    SubPlan,\n    FreeTrialEnd\n| order by Plan asc",
+        "query": "SecurityResources\n| where type == 'microsoft.security/pricings'\n| extend PricingTier  = tostring(properties.pricingTier)\n| extend SubPlan      = tostring(properties.subPlan)\n| extend FreeTrialEnd = tostring(properties.freeTrialRemainingTime)\n| project Plan = name, PricingTier, SubPlan, FreeTrialEnd\n| order by Plan asc",
         "size": 0,
         "title": "Microsoft Defender for Cloud — Plan Coverage",
         "noDataMessage": "No Defender plan data found. Ensure the subscription has Defender for Cloud enabled.",
@@ -1189,7 +1231,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type == 'microsoft.operationalinsights/workspaces'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| extend SKU           = tostring(properties.sku.name)\n| extend RetentionDays = toint(properties.retentionInDays)\n| extend DailyCapGB    = tostring(properties.workspaceCapping.dailyQuotaGb)\n| extend State         = tostring(properties.provisioningState)\n| project\n    WorkspaceName = name,\n    ResourceGroup = resourceGroup,\n    Location      = location,\n    SKU,\n    RetentionDays,\n    DailyCapGB,\n    State,\n    ResourceId    = id\n| order by ResourceGroup asc, WorkspaceName asc",
+        "query": "Resources\n| where type == 'microsoft.operationalinsights/workspaces'\n| where '*' in ({ResourceGroups}) or resourceGroup in~ ({ResourceGroups})\n| where ('{TagKey}' == '*') or ('{TagValue}' == '*' and isnotempty(tostring(tags['{TagKey}']))) or (tags['{TagKey}'] =~ '{TagValue}')\n| extend SKU           = tostring(properties.sku.name)\n| extend RetentionDays = toint(properties.retentionInDays)\n| extend DailyCapGB    = tostring(properties.workspaceCapping.dailyQuotaGb)\n| extend State         = tostring(properties.provisioningState)\n| project WorkspaceName = name, ResourceGroup = resourceGroup, Location = location, SKU, RetentionDays, DailyCapGB, State, ResourceId = id\n| order by ResourceGroup asc, WorkspaceName asc",
         "size": 0,
         "title": "Log Analytics Workspaces",
         "noDataMessage": "No Log Analytics Workspaces found for the selected scope.",
@@ -1226,7 +1268,7 @@
     {
       "type": 1,
       "content": {
-        "json": "---\n> 💡 **To add more resource types** — duplicate any query tile, update the `type` filter in the KQL, and extend/project the relevant `properties.*` fields. All tiles inherit the Subscription and Resource Group filters automatically."
+        "json": "---\n> 💡 **To add more resource types** — duplicate any query tile, update the `type` filter in the KQL, and extend/project the relevant `properties.*` fields. All tiles inherit the Subscription, Resource Group, and Tag filters automatically."
       },
       "name": "footer-note"
     }
